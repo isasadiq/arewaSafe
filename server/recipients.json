@@ -1,0 +1,6 @@
+[
+  { "name": "Demo Farmer A", "phone": "+2340000000001", "lat": 10.81, "lng": 7.58 },
+  { "name": "Demo Vigilante B", "phone": "+2340000000002", "lat": 10.79, "lng": 7.55 },
+  { "name": "Demo Motorist C", "phone": "+2340000000003", "lat": 10.83, "lng": 7.6 },
+  { "name": "Demo Farmer D (far away)", "phone": "+2340000000004", "lat": 11.05, "lng": 7.7 }
+]
