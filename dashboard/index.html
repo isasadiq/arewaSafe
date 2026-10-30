@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ArewaSafe — Tactical Travel Safety Dispatch</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    :root {
+      --bg-dark: #0a0d14;
+      --card-bg: #121722;
+      --card-hover: #1a2232;
+      --card-active: #202b3f;
+      --border: #242f44;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --text-dim: #6b7280;
+      --status-amber: #f59e0b;
+      --status-red: #ef4444;
+      --status-green: #10b981;
+      --status-blue: #3b82f6;
+      --status-purple: #8b5cf6;
+      --status-ended: #6b7280;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg-dark);
+      color: var(--text);
+      font-size: 16px;
+      line-height: 1.5;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Navigation Bar */
+    header {
+      background: #0d121c;
+      border-bottom: 2px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 1000;
+      flex-shrink: 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+    }
+
+    .brand h1 {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: #ffffff;
+      text-transform: uppercase;
+    }
+
+    .brand .subtitle {
+      font-size: 15px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .connection-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: var(--status-green);
+    }
+
+    .connection-status.offline {
+      background: rgba(107, 114, 128, 0.15);
+      border-color: rgba(107, 114, 128, 0.3);
+      color: var(--text-dim);
+    }
+
+    .pulse-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 10px currentColor;
+    }
+
+    /* Broadcast Alert Banner */
+    #broadcast-banner {
+      display: none;
+      background: linear-gradient(90deg, #065f46 0%, #047857 100%);
+      color: #ffffff;
+      padding: 14px 24px;
+      font-size: 17px;
+      font-weight: 600;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid #10b981;
+      animation: slideDown 0.3s ease-out;
+      z-index: 999;
+    }
+
+    @keyframes slideDown {
+      from { transform: translateY(-100%); }
+      to { transform: translateY(0); }
+    }
+
+    #broadcast-banner button {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      color: #ffffff;
+      padding: 4px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    /* Main Container (70% Map, 30% Incident Sidebar) */
+    .main-container {
+      display: flex;
+      flex: 1;
+      height: calc(100vh - 65px);
+      position: relative;
+    }
+
+    #map {
+      width: 68%;
+      height: 100%;
+      background: #080b11;
+    }
+
+    .sidebar {
+      width: 32%;
+      height: 100%;
+      background: var(--card-bg);
+      border-left: 2px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #0f141e;
+    }
+
+    .sidebar-header h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #ffffff;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .incident-count {
+      background: var(--border);
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 12px;
+    }
+
+    .sidebar-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Incident Card */
+    .incident-card {
+      background: #141b29;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      position: relative;
+    }
+
+    .incident-card:hover {
+      background: var(--card-hover);
+      border-color: #354460;
+    }
+
+    .incident-card.selected {
+      background: var(--card-active);
+      border-color: var(--status-red);
+      box-shadow: 0 0 16px rgba(239, 68, 68, 0.2);
+    }
+
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .badge-group {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      font-size: 12px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .badge-type-manual { background: rgba(239, 68, 68, 0.25); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.5); }
+    .badge-type-deadman { background: rgba(245, 158, 11, 0.25); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.5); }
+    .badge-type-deviation { background: rgba(168, 85, 247, 0.25); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.5); }
+
+    .badge-status-analyzing { background: rgba(139, 92, 246, 0.2); color: #c4b5fd; }
+    .badge-status-pending { background: rgba(245, 158, 11, 0.25); color: #fbbf24; border: 1px solid #f59e0b; }
+    .badge-status-confirmed { background: rgba(239, 68, 68, 0.25); color: #f87171; border: 1px solid #ef4444; }
+    .badge-status-broadcast { background: rgba(16, 185, 129, 0.25); color: #34d399; border: 1px solid #10b981; }
+
+    .card-time {
+      font-size: 13px;
+      color: var(--text-dim);
+      font-weight: 600;
+    }
+
+    .card-trip {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+
+    .card-coords {
+      font-size: 13px;
+      color: var(--text-dim);
+      font-family: monospace;
+    }
+
+    /* Selected SitRep Detail Panel */
+    .sitrep-panel {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .sitrep-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #ffffff;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .sitrep-text {
+      font-size: 15px;
+      line-height: 1.5;
+      color: #e5e7eb;
+      margin-bottom: 12px;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 10px;
+      border-radius: 6px;
+      border-left: 3px solid var(--status-blue);
+    }
+
+    /* Hausa Warning Box */
+    .hausa-box {
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      border-left: 4px solid var(--status-amber);
+      padding: 12px;
+      border-radius: 6px;
+      margin-bottom: 14px;
+    }
+
+    .hausa-label {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--status-amber);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .hausa-content {
+      font-size: 15px;
+      font-weight: 600;
+      color: #fef3c7;
+      line-height: 1.4;
+    }
+
+    /* Ranked Directions */
+    .directions-section {
+      margin-bottom: 14px;
+    }
+
+    .direction-row {
+      margin-bottom: 8px;
+    }
+
+    .direction-info {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 3px;
+      color: var(--text-muted);
+    }
+
+    .direction-bar-bg {
+      background: rgba(255, 255, 255, 0.08);
+      height: 8px;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .direction-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #60a5fa);
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+
+    .direction-reason {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+
+    /* Recommended Actions */
+    .actions-section {
+      margin-bottom: 16px;
+    }
+
+    .actions-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .action-item {
+      font-size: 14px;
+      color: #e5e7eb;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 6px 10px;
+      border-radius: 4px;
+    }
+
+    .action-icon {
+      color: var(--status-green);
+      font-weight: bold;
+    }
+
+    /* Confirm & Broadcast Button */
+    .btn-broadcast {
+      width: 100%;
+      background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+      color: #ffffff;
+      border: 1px solid #ef4444;
+      padding: 14px 18px;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(220, 38, 38, 0.4);
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-broadcast:hover {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(239, 68, 68, 0.6);
+    }
+
+    .btn-broadcast:disabled {
+      background: #4b5563;
+      border-color: #6b7280;
+      color: #9ca3af;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+
+    /* Map Custom Markers & Animations */
+    .pulsing-marker {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #ef4444;
+      border: 3px solid #ffffff;
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.9);
+      position: relative;
+    }
+
+    .pulsing-marker::after {
+      content: '';
+      position: absolute;
+      top: -12px;
+      left: -12px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(239, 68, 68, 0.5);
+      animation: pulseAnim 2s infinite ease-out;
+    }
+
+    @keyframes pulseAnim {
+      0% { transform: scale(0.5); opacity: 1; }
+      100% { transform: scale(1.6); opacity: 0; }
+    }
+
+    .trip-marker {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #3b82f6;
+      border: 2px solid #ffffff;
+      box-shadow: 0 0 8px rgba(59, 130, 246, 0.8);
+    }
+
+    .trip-marker.ended {
+      background: #6b7280;
+      border-color: #9ca3af;
+      box-shadow: none;
+    }
+
+    .empty-state {
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header>
+    <div class="brand">
+      <h1>ArewaSafe</h1>
+      <span class="subtitle">Tactical Road Safety & Community Broadcast</span>
+    </div>
+    <div id="connection-status" class="connection-status offline">
+      <span class="pulse-dot"></span>
+      <span id="connection-label">Connecting...</span>
+    </div>
+  </header>
+
+  <!-- Broadcast Notification Banner -->
+  <div id="broadcast-banner">
+    <div id="broadcast-message">Emergency broadcast sent!</div>
+    <button onclick="dismissBanner()">Dismiss</button>
+  </div>
+
+  <!-- Layout: Map & Sidebar -->
+  <div class="main-container">
+    <div id="map"></div>
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <h2>Active Incidents</h2>
+        <span id="incident-count" class="incident-count">0 incidents</span>
+      </div>
+      <div id="incident-list" class="sidebar-content">
+        <div class="empty-state">No incidents reported yet. Telemetry stream is active.</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // App State
+    let incidents = [];
+    let trips = {}; // tripId -> { polyline, marker, status, points: [] }
+    let selectedIncidentId = null;
+    let incidentMarkers = {}; // incidentId -> marker
+    let radiusCircle = null; // 5km circle L.circle
+
+    // Setup Leaflet Map with CartoDB Dark Matter for Projector Readability
+    const map = L.map('map', {
+      center: [10.75, 7.55], // Kaduna-Zaria corridor center
+      zoom: 9,
+      zoomControl: true
+    });
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+      subdomains: 'abcd',
+      maxZoom: 19
+    }).addTo(map);
+
+    // Initial Highway Corridor Line for context
+    const CORRIDOR = [
+      [10.5105, 7.4165], // Kaduna
+      [10.8, 7.57],      // midpoint
+      [11.0855, 7.7199]  // Zaria
+    ];
+    L.polyline(CORRIDOR, {
+      color: '#475569',
+      weight: 3,
+      dashArray: '4, 8',
+      opacity: 0.6
+    }).addTo(map).bindTooltip("Kaduna–Zaria Highway Corridor", { sticky: true });
+
+    // Connect SSE Stream with Auto-Reconnect
+    let eventSource = null;
+    let reconnectTimeout = null;
+
+    function connectSSE() {
+      if (eventSource) {
+        eventSource.close();
+      }
+
+      setConnectionStatus(false, 'Connecting...');
+      eventSource = new EventSource('/stream');
+
+      eventSource.onopen = () => {
+        setConnectionStatus(true, 'Live Connected');
+        if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      };
+
+      eventSource.onerror = () => {
+        setConnectionStatus(false, 'Reconnecting...');
+        eventSource.close();
+        reconnectTimeout = setTimeout(connectSSE, 3000);
+      };
+
+      eventSource.addEventListener('ping', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          handlePing(data);
+        } catch (err) {
+          console.error('Error handling ping event:', err);
+        }
+      });
+
+      eventSource.addEventListener('incident', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          handleIncident(data);
+        } catch (err) {
+          console.error('Error handling incident event:', err);
+        }
+      });
+
+      eventSource.addEventListener('incident:update', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          handleIncidentUpdate(data);
+        } catch (err) {
+          console.error('Error handling incident:update event:', err);
+        }
+      });
+
+      eventSource.addEventListener('broadcast', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          showBroadcastBanner(data);
+        } catch (err) {
+          console.error('Error handling broadcast event:', err);
+        }
+      });
+
+      eventSource.addEventListener('trip', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          handleTripUpdate(data);
+        } catch (err) {
+          console.error('Error handling trip event:', err);
+        }
+      });
+    }
+
+    function setConnectionStatus(online, label) {
+      const el = document.getElementById('connection-status');
+      const labelEl = document.getElementById('connection-label');
+      if (online) {
+        el.className = 'connection-status';
+        labelEl.innerText = label;
+      } else {
+        el.className = 'connection-status offline';
+        labelEl.innerText = label;
+      }
+    }
+
+    // Ping / Telemetry Handling
+    function handlePing(ping) {
+      const { tripId, lat, lng, speed, heading } = ping;
+      if (!trips[tripId]) {
+        trips[tripId] = {
+          points: [],
+          status: 'ACTIVE',
+          polyline: L.polyline([], { color: '#3b82f6', weight: 4, opacity: 0.9 }).addTo(map),
+          marker: L.marker([lat, lng], {
+            icon: L.divIcon({ className: 'trip-marker', iconSize: [14, 14], iconAnchor: [7, 7] })
+          }).addTo(map)
+        };
+      }
+
+      const trip = trips[tripId];
+      const pt = [lat, lng];
+      trip.points.push(pt);
+      trip.polyline.addLatLng(pt);
+      trip.marker.setLatLng(pt);
+
+      const spdText = speed != null ? `${Math.round(speed)} km/h` : 'N/A';
+      const hdgText = heading != null ? `${Math.round(heading)}°` : 'N/A';
+      trip.marker.bindTooltip(`Trip #${tripId}<br>Speed: ${spdText}<br>Heading: ${hdgText}`);
+    }
+
+    // Trip Status Updates
+    function handleTripUpdate({ id, status }) {
+      if (trips[id]) {
+        trips[id].status = status;
+        if (status === 'ENDED') {
+          trips[id].polyline.setStyle({ color: '#6b7280', dashArray: '4, 4' });
+          const el = trips[id].marker.getElement();
+          if (el) el.classList.add('ended');
+        }
+      }
+    }
+
+    // Incident Handlers
+    function handleIncident(inc) {
+      const existingIdx = incidents.findIndex((i) => i.id === inc.id);
+      if (existingIdx >= 0) {
+        incidents[existingIdx] = { ...incidents[existingIdx], ...inc };
+      } else {
+        incidents.unshift(inc);
+      }
+      updateIncidentMarker(inc);
+      renderIncidents();
+    }
+
+    function handleIncidentUpdate(inc) {
+      const existingIdx = incidents.findIndex((i) => i.id === inc.id);
+      if (existingIdx >= 0) {
+        incidents[existingIdx] = { ...incidents[existingIdx], ...inc };
+      } else {
+        incidents.unshift(inc);
+      }
+      updateIncidentMarker(inc);
+      renderIncidents();
+    }
+
+    function updateIncidentMarker(inc) {
+      if (!inc.lat || !inc.lng) return;
+
+      if (!incidentMarkers[inc.id]) {
+        const marker = L.marker([inc.lat, inc.lng], {
+          icon: L.divIcon({
+            className: 'pulsing-marker',
+            iconSize: [22, 22],
+            iconAnchor: [11, 11]
+          })
+        }).addTo(map);
+
+        marker.on('click', () => selectIncident(inc.id));
+        incidentMarkers[inc.id] = marker;
+      }
+
+      incidentMarkers[inc.id].bindTooltip(`<b>${inc.type}</b> (#${inc.id})<br>Status: ${inc.status}`);
+    }
+
+    function selectIncident(id) {
+      selectedIncidentId = id;
+      const inc = incidents.find((i) => i.id === id);
+      if (!inc) return;
+
+      // Draw or update 5km Circle
+      if (inc.lat && inc.lng) {
+        if (radiusCircle) {
+          map.removeLayer(radiusCircle);
+        }
+        radiusCircle = L.circle([inc.lat, inc.lng], {
+          radius: 5000,
+          color: '#ef4444',
+          fillColor: '#ef4444',
+          fillOpacity: 0.15,
+          weight: 2,
+          dashArray: '6, 6'
+        }).addTo(map);
+
+        map.flyTo([inc.lat, inc.lng], 11, { duration: 0.8 });
+      }
+
+      renderIncidents();
+    }
+
+    async function confirmAndBroadcast(incidentId, event) {
+      if (event) event.stopPropagation();
+      const btn = document.getElementById(`btn-confirm-${incidentId}`);
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = 'Broadcasting...';
+      }
+
+      try {
+        const res = await fetch(`/incidents/${incidentId}/confirm`, { method: 'POST' });
+        if (!res.ok) {
+          const err = await res.json();
+          alert(`Error: ${err.error || 'Failed to broadcast'}`);
+          if (btn) {
+            btn.disabled = false;
+            btn.innerText = 'Confirm & Broadcast (5km Radius)';
+          }
+        }
+      } catch (err) {
+        console.error('Confirm error:', err);
+        alert('Network error confirming incident.');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerText = 'Confirm & Broadcast (5km Radius)';
+        }
+      }
+    }
+
+    function showBroadcastBanner(data) {
+      const banner = document.getElementById('broadcast-banner');
+      const msg = document.getElementById('broadcast-message');
+      const count = data.sent != null ? data.sent : (data.recipients ? data.recipients.length : 0);
+      const names = data.recipients && data.recipients.length > 0 ? ` (${data.recipients.join(', ')})` : '';
+      msg.innerHTML = `<strong>BROADCAST SENT:</strong> Successfully alerted <strong>${count} recipients</strong> within 5km radius${names}!`;
+      banner.style.display = 'flex';
+    }
+
+    function dismissBanner() {
+      document.getElementById('broadcast-banner').style.display = 'none';
+    }
+
+    function renderIncidents() {
+      const listEl = document.getElementById('incident-list');
+      const countEl = document.getElementById('incident-count');
+      countEl.innerText = `${incidents.length} incident${incidents.length === 1 ? '' : 's'}`;
+
+      if (incidents.length === 0) {
+        listEl.innerHTML = '<div class="empty-state">No incidents reported yet. Telemetry stream is active.</div>';
+        return;
+      }
+
+      listEl.innerHTML = incidents.map((inc) => {
+        const isSelected = inc.id === selectedIncidentId;
+        const sitrep = inc.sitrep;
+
+        let typeBadgeClass = 'badge-type-manual';
+        if (inc.type === 'DEAD_MAN') typeBadgeClass = 'badge-type-deadman';
+        if (inc.type === 'BUSH_DEVIATION') typeBadgeClass = 'badge-type-deviation';
+
+        let statusBadgeClass = 'badge-status-analyzing';
+        if (inc.status === 'PENDING_CONFIRM') statusBadgeClass = 'badge-status-pending';
+        if (inc.status === 'CONFIRMED') statusBadgeClass = 'badge-status-confirmed';
+        if (inc.status === 'BROADCAST') statusBadgeClass = 'badge-status-broadcast';
+
+        const timeStr = inc.created_at ? new Date(inc.created_at).toLocaleTimeString() : 'Just now';
+
+        // Render SitRep section if available & selected
+        let sitrepHtml = '';
+        if (isSelected && sitrep) {
+          // Likely directions
+          let directionsHtml = '';
+          if (sitrep.likely_directions && sitrep.likely_directions.length > 0) {
+            directionsHtml = `
+              <div class="directions-section">
+                <div class="sitrep-title">Ranked Likely Headings</div>
+                ${sitrep.likely_directions.map(d => `
+                  <div class="direction-row">
+                    <div class="direction-info">
+                      <span>${d.direction}</span>
+                      <span>${Math.round((d.confidence || 0) * 100)}%</span>
+                    </div>
+                    <div class="direction-bar-bg">
+                      <div class="direction-bar-fill" style="width: ${Math.round((d.confidence || 0) * 100)}%"></div>
+                    </div>
+                    ${d.reason ? `<div class="direction-reason">${d.reason}</div>` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            `;
+          }
+
+          // Recommended actions
+          let actionsHtml = '';
+          if (sitrep.recommended_actions && sitrep.recommended_actions.length > 0) {
+            actionsHtml = `
+              <div class="actions-section">
+                <div class="sitrep-title">Recommended Actions</div>
+                <ul class="actions-list">
+                  ${sitrep.recommended_actions.map(act => `
+                    <li class="action-item">
+                      <span class="action-icon">✓</span>
+                      <span>${act}</span>
+                    </li>
+                  `).join('')}
+                </ul>
+              </div>
+            `;
+          }
+
+          // Action Button
+          const canBroadcast = inc.status === 'PENDING_CONFIRM' || inc.status === 'CONFIRMED';
+          const btnHtml = canBroadcast ? `
+            <button id="btn-confirm-${inc.id}" class="btn-broadcast" onclick="confirmAndBroadcast(${inc.id}, event)">
+              Confirm & Broadcast (5km Radius)
+            </button>
+          ` : '';
+
+          sitrepHtml = `
+            <div class="sitrep-panel">
+              <div class="sitrep-title">Situation Report (AI Dispatch)</div>
+              <div class="sitrep-text">${sitrep.sitrep || sitrep.english_warning || 'Analyzing incident data...'}</div>
+
+              ${sitrep.hausa_warning ? `
+                <div class="hausa-box">
+                  <div class="hausa-label">Hausa Warning (Flash Broadcast)</div>
+                  <div class="hausa-content">${sitrep.hausa_warning}</div>
+                </div>
+              ` : ''}
+
+              ${directionsHtml}
+              ${actionsHtml}
+              ${btnHtml}
+            </div>
+          `;
+        } else if (isSelected && !sitrep) {
+          sitrepHtml = `
+            <div class="sitrep-panel">
+              <div class="sitrep-text" style="color: var(--status-purple);">
+                ⚡ Tactical dispatcher is analyzing telemetry and generating situation report...
+              </div>
+            </div>
+          `;
+        }
+
+        return `
+          <div class="incident-card ${isSelected ? 'selected' : ''}" onclick="selectIncident(${inc.id})">
+            <div class="card-top">
+              <div class="badge-group">
+                <span class="badge ${typeBadgeClass}">${inc.type.replace('_', ' ')}</span>
+                <span class="badge ${statusBadgeClass}">${inc.status.replace('_', ' ')}</span>
+              </div>
+              <span class="card-time">${timeStr}</span>
+            </div>
+            <div class="card-trip">Trip #${inc.trip_id} • Incident #${inc.id}</div>
+            <div class="card-coords">${inc.lat != null ? inc.lat.toFixed(4) : '--'}, ${inc.lng != null ? inc.lng.toFixed(4) : '--'}</div>
+            ${sitrepHtml}
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Load initial incidents & trips on startup
+    async function loadInitialData() {
+      try {
+        const res = await fetch('/incidents');
+        if (res.ok) {
+          incidents = await res.json();
+          incidents.forEach((inc) => updateIncidentMarker(inc));
+          if (incidents.length > 0) {
+            selectIncident(incidents[0].id);
+          }
+          renderIncidents();
+        }
+      } catch (err) {
+        console.error('Failed to load initial incidents:', err);
+      }
+    }
+
+    // Boot
+    loadInitialData();
+    connectSSE();
+  </script>
+</body>
+</html>
