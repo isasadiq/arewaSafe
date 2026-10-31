@@ -46,4 +46,14 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 `);
 
+// Seed default authorized devices for field hardware, mobile units, and simulators
+const seedDevice = db.prepare(`
+  INSERT OR IGNORE INTO devices (id, label, token, created_at)
+  VALUES (?, ?, ?, ?)
+`);
+const now = Date.now();
+seedDevice.run('DEV-MOBILE-01', 'Commercial Transit Mobile Unit #1', 'AREWASAFE-DEV-MOBILE-01', now);
+seedDevice.run('HW-BUS-01', 'ESP32 Under-Seat Blackbox Unit #1', 'AREWASAFE-HW-BUS-01', now);
+seedDevice.run('DEMO-SIM-01', 'Tactical Demo & Simulation Driver', 'AREWASAFE-DEMO-SIM', now);
+
 export default db;

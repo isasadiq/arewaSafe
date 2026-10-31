@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   StatusBar,
   Dimensions,
+  Vibration,
 } from 'react-native';
 import { evaluateExpression } from './src/utils/calculator';
 import { telemetryService } from './src/services/api';
@@ -27,6 +28,11 @@ export default function App() {
   }, []);
 
   const handleKeyPress = (key: string) => {
+    // Tactile haptic feedback mimicking mechanical Casio keys
+    try {
+      Vibration.vibrate(12);
+    } catch (_) {}
+
     // Record into hidden key buffer
     keyBuffer.current.push(key);
     if (keyBuffer.current.length > 20) {

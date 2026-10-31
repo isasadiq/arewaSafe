@@ -26,8 +26,9 @@ const int   SERVER_PORT = 3000;
 const char* DEVICE_TOKEN = "AREWASAFE-HW-BUS-01";
 
 const unsigned long HEARTBEAT_INTERVAL_MS = 10000; // 10s ping interval
-const int FOOT_SWITCH_PIN = 4; // Pull-up microswitch wired under driver footwell
+const int FOOT_SWITCH_PIN = 4;   // Pull-up microswitch wired under driver footwell
 const int IGNITION_ACC_PIN = 34; // 12V ACC sensed through optocoupler (HIGH = engine running)
+const int CRASH_SENSOR_PIN = 35; // Digital impact shock / rollover sensor (HIGH = collision)
 const int WDT_TIMEOUT_SECONDS = 30; // Auto-reboot ESP32 if stuck for 30s
 
 // Serial Interfaces on ESP32
@@ -37,6 +38,7 @@ HardwareSerial SerialGSM(1);  // RX1: GPIO 18, TX1: GPIO 19
 // Telemetry State
 int tripId = 0;
 unsigned long lastPingTime = 0;
+unsigned long engineOffStartTime = 0;
 float currentLat = 0.0;
 float currentLng = 0.0;
 float currentSpeedKmh = 0.0;
@@ -48,13 +50,15 @@ void initModem();
 bool sendGsmCommand(const String& cmd, const String& expected, unsigned long timeoutMs = 2000);
 void parseNmeaSentence(const String& sentence);
 void sendHeartbeat();
-void sendEmergencyAlert();
+void sendEmergencyAlert(const String& reason = "MANUAL_FOOT_SWITCH");
+void checkPowerManagement();
 void startTripSession();
 
 void setup() {
   Serial.begin(115200);
   pinMode(FOOT_SWITCH_PIN, INPUT_PULLUP);
   pinMode(IGNITION_ACC_PIN, INPUT);
+  pinMode(CRASH_SENSOR_PIN, INPUT_PULLDOWN);
 
   Serial.println(F("[ArewaSafe Blackbox] Booting Covert Vehicle Telematics..."));
 
@@ -87,16 +91,49 @@ void loop() {
   // 2. Check Covert Driver Foot Switch (Active LOW)
   if (digitalRead(FOOT_SWITCH_PIN) == LOW) {
     Serial.println(F("⚠️ [ALARM] Covert foot-switch triggered by driver!"));
-    sendEmergencyAlert();
+    sendEmergencyAlert("MANUAL_FOOT_SWITCH");
     delay(2000); // Debounce
   }
 
-  // 3. Periodic Telemetry Heartbeat
+  // 3. Check Collision & Rollover Impact Sensor (Active HIGH)
+  if (digitalRead(CRASH_SENSOR_PIN) == HIGH) {
+    Serial.println(F("💥 [ALARM] Severe vehicle collision or rollover detected!"));
+    sendEmergencyAlert("CRASH_ROLLOVER");
+    delay(2500);
+  }
+
+  // 4. Low-Power Ignition Management
+  checkPowerManagement();
+
+  // 5. Periodic Telemetry Heartbeat
   if (millis() - lastPingTime >= HEARTBEAT_INTERVAL_MS) {
     lastPingTime = millis();
     if (gpsFixAcquired && tripId > 0) {
       sendHeartbeat();
     }
+  }
+}
+
+/**
+ * Low-Power Ignition Management:
+ * When vehicle engine is switched off, enters low-power sleep
+ * to protect vehicle battery while maintaining periodic parked check-ins.
+ */
+void checkPowerManagement() {
+  bool engineRunning = (digitalRead(IGNITION_ACC_PIN) == HIGH);
+  if (!engineRunning) {
+    if (engineOffStartTime == 0) {
+      engineOffStartTime = millis();
+    } else if (millis() - engineOffStartTime > 180000) { // Engine off for > 3 minutes
+      Serial.println(F("[Power] Engine off. Suspending high-frequency pings, entering low-power sleep."));
+      // Configure wakeup on foot-switch, crash sensor, or 15-minute timer
+      esp_sleep_enable_ext0_wakeup((gpio_num_t)FOOT_SWITCH_PIN, 0); // LOW = panic
+      esp_sleep_enable_timer_wakeup(15ULL * 60ULL * 1000000ULL);     // 15 minutes
+      esp_light_sleep_start();
+      engineOffStartTime = 0; // Reset after wake
+    }
+  } else {
+    engineOffStartTime = 0;
   }
 }
 
@@ -173,11 +210,12 @@ void sendHeartbeat() {
 /**
  * Trigger silent emergency alarm
  */
-void sendEmergencyAlert() {
+void sendEmergencyAlert(const String& reason) {
   String url = "http://" + String(SERVER_HOST) + ":" + String(SERVER_PORT) + "/alert";
   String payload = "{\"tripId\":" + String(tripId) +
                    ",\"lat\":" + String(currentLat, 6) +
-                   ",\"lng\":" + String(currentLng, 6) + "}";
+                   ",\"lng\":" + String(currentLng, 6) +
+                   ",\"reason\":\"" + reason + "\"}";
 
   sendGsmCommand("AT+HTTPPARA=\"URL\",\"" + url + "\"", "OK");
   sendGsmCommand("AT+HTTPPARA=\"CONTENT\",\"application/json\"", "OK");
@@ -185,7 +223,7 @@ void sendEmergencyAlert() {
   SerialGSM.print(payload);
   delay(300);
   sendGsmCommand("AT+HTTPACTION=1", "OK", 3000);
-  Serial.println("[Alarm] Silent distress dispatched to tactical dashboard!");
+  Serial.println("[Alarm] Silent distress (" + reason + ") dispatched to tactical dashboard!");
 }
 
 /**

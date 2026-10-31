@@ -230,6 +230,33 @@ body[data-theme="dark"] .foot { background: rgba(0,0,0,0.25); }
 .sent b { font: 800 19px var(--display); font-stretch: 108%; display: block; }
 .sent span { color: var(--dim); font-size: 15px; }
 
+/* Outpost & Rapid Response Intercept Box */
+.outpost-box {
+  margin: 14px 0 16px;
+  padding: 12px 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--trip);
+  border-radius: 8px;
+}
+.outpost-lbl {
+  font: 700 12px var(--display);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--dim);
+  margin-bottom: 4px;
+}
+.outpost-val {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.outpost-sub {
+  font-size: 13px;
+  color: var(--dim);
+  margin-top: 2px;
+}
+
 .skeleton { height: 14px; border-radius: 6px; margin: 0 0 8px; background: linear-gradient(90deg, var(--card) 25%, var(--card-hover) 50%, var(--card) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 
@@ -302,6 +329,7 @@ body[data-theme="dark"] .foot { background: rgba(0,0,0,0.25); }
   #map, #mast, #ledger, #demo-dock, #toast, .x, .foot { display: none !important; }
   #sheet { position: static !important; width: 100% !important; height: auto !important; border: 0 !important; box-shadow: none !important; display: block !important; padding: 20px !important; background: transparent !important; }
   .sheet-body { overflow: visible !important; padding: 0 !important; }
+  .print-header { display: block !important; margin-bottom: 20px; border-bottom: 2px solid #111827; padding-bottom: 12px; }
   .notice { background: #f3f4f6 !important; color: #111827 !important; border: 2px solid #374151 !important; }
   .badge { border: 1px solid #111827 !important; color: #111827 !important; background: #e5e7eb !important; }
 }
@@ -404,6 +432,16 @@ body[data-theme="dark"] .foot { background: rgba(0,0,0,0.25); }
         gain.connect(audioCtx.destination);
         osc.start(now);
         osc.stop(now + 0.45);
+      } else if (type === 'deadman') {
+        // Cautionary pulse chime for signal loss
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(329.63, now); // E4
+        gain.gain.setValueAtTime(0.16, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.35);
       } else {
         // Tactical dual-tone alert chime
         osc.frequency.setValueAtTime(440, now); // A4
@@ -528,7 +566,34 @@ body[data-theme="dark"] .foot { background: rgba(0,0,0,0.25); }
   const markers = new Map();    // incident id -> L.marker
   let selected = null;
   let ring = null;
+  let vectorLine = null;
   let lastBroadcast = null;
+
+  function getDistanceKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  }
+
+  function findNearestCheckpoint(lat, lng) {
+    let nearest = null;
+    let minDist = Infinity;
+    Object.values(CORRIDORS).forEach(corridor => {
+      (corridor.checkpoints || []).forEach(cp => {
+        const d = getDistanceKm(lat, lng, cp.lat, cp.lng);
+        if (d < minDist) {
+          minDist = d;
+          nearest = { ...cp, distanceKm: Math.round(d * 10) / 10, corridorName: corridor.name };
+        }
+      });
+    });
+    return nearest;
+  }
 
   function ensureTrip(id) {
     let t = trips.get(id);
@@ -577,8 +642,22 @@ body[data-theme="dark"] .foot { background: rgba(0,0,0,0.25); }
     selected = id;
     const inc = incidents.get(id);
     if (ring) { map.removeLayer(ring); ring = null; }
+    if (vectorLine) { map.removeLayer(vectorLine); vectorLine = null; }
+
     if (inc && inc.lat != null) {
       ring = L.circle([inc.lat, inc.lng], { radius: RADIUS_KM * 1000, color: '#b5301a', weight: 2, dashArray: '8 8', fillColor: '#b5301a', fillOpacity: 0.08 }).addTo(map);
+
+      const nearestCp = findNearestCheckpoint(inc.lat, inc.lng);
+      if (nearestCp) {
+        vectorLine = L.polyline([[nearestCp.lat, nearestCp.lng], [inc.lat, inc.lng]], {
+          color: '#b5301a',
+          weight: 2,
+          dashArray: '4, 6',
+          opacity: 0.85
+        }).addTo(map);
+        vectorLine.bindTooltip(`<b>Rapid Intercept Vector</b><br>${nearestCp.name} &rarr; Incident (${nearestCp.distanceKm} km)`, { sticky: true });
+      }
+
       if (fly) {
         const wide = window.innerWidth > 960;
         map.flyToBounds(ring.getBounds(), { paddingTopLeft: [wide ? 380 : 20, 90], paddingBottomRight: [wide ? 480 : 20, wide ? 30 : window.innerHeight * 0.55], duration: 0.8 });
@@ -603,7 +682,7 @@ body[data-theme="dark"] .foot { background: rgba(0,0,0,0.25); }
     ensureMarker(inc);
 
     if (isNew && !prev) {
-      playAlertSound('alert');
+      playAlertSound(d.type === 'DEAD_MAN' ? 'deadman' : 'alert');
       select(inc.id);
     } else {
       renderLedger();
@@ -687,8 +766,17 @@ body[data-theme="dark"] .foot { background: rgba(0,0,0,0.25); }
       }).join('');
       const acts = (s.recommended_actions || []).map((a, i) => `<li><label><input type="checkbox" ${keep[i] ? 'checked' : ''}><span>${esc(a)}</span></label></li>`).join('');
       const fallback = !s.source || s.source === 'fallback';
+      const nearestCp = (inc.lat != null && inc.lng != null) ? findNearestCheckpoint(inc.lat, inc.lng) : null;
+      const outpostHtml = nearestCp ? `
+        <div class="outpost-box">
+          <div class="outpost-lbl">🛡️ Closest Security Intercept Outpost</div>
+          <div class="outpost-val"><b>${esc(nearestCp.name)}</b> &bull; ${nearestCp.distanceKm} km away</div>
+          <div class="outpost-sub">Estimated Highway Intercept: ~${Math.max(3, Math.round(nearestCp.distanceKm / 75 * 60))} mins via patrol unit</div>
+        </div>` : '';
+
       body = `
         <h3>What happened</h3><p>${esc(s.sitrep)}</p>
+        ${outpostHtml}
         ${dirs ? `<h3>Where they may be heading</h3>${dirs}<small class="src" style="display:block;margin:0">These are possibilities for responders to check, not predictions.</small>` : ''}
         <section class="notice" aria-label="Warning for people nearby">
           <p class="lead">Warning for people within ${RADIUS_KM} km</p>
@@ -713,7 +801,15 @@ body[data-theme="dark"] .foot { background: rgba(0,0,0,0.25); }
       foot = `<button class="btn" disabled>Waiting for the report</button>`;
     }
 
+    const printCp = (inc.lat != null && inc.lng != null) ? findNearestCheckpoint(inc.lat, inc.lng) : null;
     sheet.innerHTML = `
+      <div class="print-header" style="display:none;">
+        <div style="font-size:12px; font-weight:bold; letter-spacing:1px; text-transform:uppercase; color:#6b7280;">Federal Republic of Nigeria &bull; Interstate Transit Security Command</div>
+        <h1 style="margin:4px 0 8px; font-size:22px; font-family:var(--display);">AREWASAFE TACTICAL SITUATION REPORT</h1>
+        <div style="font-size:13px; margin-bottom:12px; border-bottom:1px solid #111827; padding-bottom:6px;">
+          <strong>INCIDENT REF:</strong> #${inc.id} &nbsp;|&nbsp; <strong>CORRIDOR:</strong> ${esc(printCp ? printCp.corridorName : 'Interstate Highway')} &nbsp;|&nbsp; <strong>COORDS:</strong> ${inc.lat ? inc.lat.toFixed(5) : 'N/A'}, ${inc.lng ? inc.lng.toFixed(5) : 'N/A'}
+        </div>
+      </div>
       <div class="sheet-head"><div><div class="sheet-type">${esc(TYPES[inc.type] || inc.type)}</div>
         <div class="sheet-meta">Trip ${esc(inc.tripId)}, ${ago(inc.created_at)}</div></div>
         <button class="x" id="close" aria-label="Close report">&times;</button></div>
@@ -726,7 +822,7 @@ body[data-theme="dark"] .foot { background: rgba(0,0,0,0.25); }
       </div>`;
     sheet.classList.add('open');
 
-    $('close').onclick = () => { selected = null; if (ring) { map.removeLayer(ring); ring = null; } renderSheet(); renderLedger(); };
+    $('close').onclick = () => { selected = null; if (ring) { map.removeLayer(ring); ring = null; } if (vectorLine) { map.removeLayer(vectorLine); vectorLine = null; } renderSheet(); renderLedger(); };
     $('print-sitrep').onclick = () => window.print();
 
     const c = $('confirm');
@@ -796,7 +892,11 @@ body[data-theme="dark"] .foot { background: rgba(0,0,0,0.25); }
     const c = CORRIDORS[corridorId] || CORRIDORS['kaduna-zaria'];
     toast(`Running ${scenario.toUpperCase()} on ${c.name}...`);
     try {
-      const res = await fetch(`${BASE}/trips/start`, { method: 'POST' });
+      const authHeaders = {
+        'Content-Type': 'application/json',
+        'X-Device-Token': 'AREWASAFE-DEMO-SIM',
+      };
+      const res = await fetch(`${BASE}/trips/start`, { method: 'POST', headers: authHeaders });
       if (!res.ok) throw new Error('Failed to start trip');
       const { tripId } = await res.json();
 
@@ -816,7 +916,7 @@ body[data-theme="dark"] .foot { background: rgba(0,0,0,0.25); }
         lat += stepLat; lng += stepLng;
         await fetch(`${BASE}/heartbeat`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders,
           body: JSON.stringify({ tripId, lat, lng, speed, heading })
         });
         await new Promise(r => setTimeout(r, 600));
@@ -831,7 +931,7 @@ body[data-theme="dark"] .foot { background: rgba(0,0,0,0.25); }
         lat += perpLat; lng += perpLng;
         await fetch(`${BASE}/heartbeat`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders,
           body: JSON.stringify({ tripId, lat, lng, speed, heading })
         });
         await new Promise(r => setTimeout(r, 700));
@@ -839,14 +939,14 @@ body[data-theme="dark"] .foot { background: rgba(0,0,0,0.25); }
         lat += perpLat * 0.4; lng += perpLng * 0.4;
         await fetch(`${BASE}/heartbeat`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders,
           body: JSON.stringify({ tripId, lat, lng, speed, heading })
         });
         toast(`Bush Deviation detected on ${c.name}! Generating Gemma AI SitRep...`);
       } else if (scenario === 'manual') {
         await fetch(`${BASE}/alert`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders,
           body: JSON.stringify({ tripId, lat, lng })
         });
         toast(`Silent 911= Panic Alert triggered on ${c.name}!`);

@@ -154,6 +154,22 @@ npx expo start
 ```
 Open **Expo Go** on your Android device or iPhone and scan the QR code.
 
+### 4. Production Verification Suite
+Run the automated end-to-end production verification suite covering health checks, multi-corridor geofences, tactical PIN authorization, device tokens, telemetry deviation, and AI SitRep generation:
+```bash
+node scripts/verify-production.js
+```
+
+### 5. Production Docker Deployment
+Launch the complete containerized stack with 1-click Docker Compose:
+```bash
+docker compose up -d
+```
+Monitor system health:
+```bash
+curl http://localhost:3000/health
+```
+
 ---
 
 ## 🎬 End-to-End Demo Script

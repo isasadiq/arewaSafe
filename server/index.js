@@ -102,6 +102,31 @@ app.get('/trips/:id/track', (req, res) => {
   res.json(db.prepare('SELECT lat, lng, speed, heading, ts FROM pings WHERE trip_id = ? ORDER BY ts').all(Number(req.params.id)));
 });
 
+// Fleet Device Management & Security Endpoints
+app.get('/devices', dispatcherAuth, (_req, res) => {
+  res.json(db.prepare('SELECT id, label, token, created_at, last_seen_at FROM devices ORDER BY created_at DESC').all());
+});
+
+app.post('/devices', dispatcherAuth, (req, res) => {
+  const { id, label, token } = req.body;
+  if (!id || !label || !token) {
+    return res.status(400).json({ error: 'id, label, and token are required' });
+  }
+  try {
+    db.prepare('INSERT INTO devices (id, label, token, created_at) VALUES (?, ?, ?, ?)').run(id, label, token, Date.now());
+    logAudit('DEVICE_REGISTERED', req.ip || 'dispatcher', { id, label });
+    res.json({ ok: true, device: { id, label } });
+  } catch (err) {
+    res.status(409).json({ error: 'Device ID or token already exists' });
+  }
+});
+
+// Tactical Security Audit Logs
+app.get('/audit-logs', dispatcherAuth, (_req, res) => {
+  const logs = db.prepare('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 100').all();
+  res.json(logs.map((l) => ({ ...l, details: l.details_json ? JSON.parse(l.details_json) : null })));
+});
+
 // Dashboard "Confirm & broadcast" button.
 app.post('/incidents/:id/confirm', dispatcherAuth, (req, res) => {
   const result = confirmIncident(Number(req.params.id));

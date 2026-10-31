@@ -60,9 +60,14 @@ function sleep(ms) {
 }
 
 async function api(path, options = {}) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-Device-Token': process.env.DEVICE_TOKEN || 'AREWASAFE-DEMO-SIM',
+    ...(options.headers || {}),
+  };
   const res = await fetch(`${SERVER_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers,
   });
   if (!res.ok) {
     const text = await res.text();
