@@ -7,7 +7,7 @@
  * - manual: normal driving, followed by silent 911= calculator trigger
  */
 
-import { CORRIDOR } from '../server/config.js';
+import { CORRIDOR, CORRIDORS, getCorridor } from '../server/config.js';
 
 // CLI and Environment Config
 const args = process.argv.slice(2);
@@ -21,6 +21,9 @@ function getArg(flag, envKey, defaultValue) {
 
 const SERVER_URL = getArg('--url', 'SERVER_URL', 'http://localhost:3000').replace(/\/$/, '');
 const INTERVAL_MS = Number(getArg('--interval', 'INTERVAL_MS', 2000));
+const CORRIDOR_ID = getArg('--corridor', 'CORRIDOR', 'kaduna-zaria');
+const ACTIVE_CORRIDOR = getCorridor(CORRIDOR_ID);
+const corridorPoints = ACTIVE_CORRIDOR.points || CORRIDOR;
 
 // Geodesic math helpers
 const R = 6371000;
@@ -81,6 +84,7 @@ Modes:
 Options:
   --url <url>        Server URL (default: http://localhost:3000, env: SERVER_URL)
   --interval <ms>    Heartbeat interval in ms (default: 2000, env: INTERVAL_MS)
+  --corridor <id>    Corridor: kaduna-zaria, abuja-kaduna, birnin-gwari, kano-katsina
   --help             Show this help message
 `);
 }
@@ -103,10 +107,11 @@ async function main() {
   console.log(`✓ Trip #${tripId} started successfully.\n`);
 
   // Corridor base trajectory
-  const startPt = { ...CORRIDOR[0] };
-  const midPt = { ...CORRIDOR[1] };
+  const startPt = { ...corridorPoints[0] };
+  const midPt = { ...corridorPoints[1] };
   const roadBearing = Math.round(bearing(startPt, midPt));
-  console.log(`Highway Corridor bearing: ${roadBearing}° (Kaduna -> Zaria)`);
+  console.log(`Highway Corridor: ${ACTIVE_CORRIDOR.name} [Risk: ${ACTIVE_CORRIDOR.risk_level}]`);
+  console.log(`Heading along corridor: ${roadBearing}°`);
 
   let currentPos = { ...startPt };
   let pingCount = 0;

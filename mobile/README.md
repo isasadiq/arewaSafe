@@ -43,6 +43,20 @@ npx expo start
 - **Android**: Open the **Expo Go** app and tap **Scan QR code**, then point the camera at the QR code displayed in your terminal.
 - **iOS**: Open the native **Camera** app, point at the terminal QR code, and tap the prompt to open in Expo Go.
 
+### 6. Build Standalone Android APK (Optional)
+To generate an installable `.apk` file directly for Android phones without needing Expo Go:
+```bash
+# Install EAS CLI globally if not already installed
+npm install -g eas-cli
+
+# Login to your Expo account
+eas login
+
+# Build APK in the cloud
+npm run build:apk
+```
+Once the build completes, download the generated `.apk` and install the disguise Calculator app directly on your phone!
+
 ---
 
 ## Testing Triggers

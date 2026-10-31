@@ -3,7 +3,7 @@ import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import db from './db.js';
-import { PORT } from './config.js';
+import { PORT, CORRIDORS } from './config.js';
 import { addClient, removeClient, emit } from './events.js';
 import { checkDeviation, clearDeviation } from './deviation.js';
 import { createIncident, confirmIncident } from './incidents.js';
@@ -71,6 +71,10 @@ app.get('/incidents', (_req, res) => {
 
 app.get('/trips', (_req, res) => {
   res.json(db.prepare("SELECT id, status, started_at, last_ping_at FROM trips WHERE status != 'ENDED' ORDER BY id").all());
+});
+
+app.get('/corridors', (_req, res) => {
+  res.json(CORRIDORS);
 });
 
 app.get('/trips/:id/track', (req, res) => {

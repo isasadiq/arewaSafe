@@ -1,6 +1,6 @@
 import db from './db.js';
 import {
-  CORRIDOR, DEVIATION_METERS, DEVIATION_MAX_KMH, DEVIATION_STRIKES,
+  CORRIDOR, DEVIATION_METERS, DEVIATION_MAX_KMH, DEVIATION_STRIKES, findNearestCorridor,
 } from './config.js';
 import { nearestOnPolyline, angleDiff } from './geo.js';
 
@@ -11,7 +11,9 @@ const strikes = new Map(); // tripId -> consecutive suspicious pings
  * "left the road into the bush at slow speed" pattern is confirmed.
  */
 export function checkDeviation(tripId, ping) {
-  const here = nearestOnPolyline(ping, CORRIDOR);
+  const match = findNearestCorridor(ping);
+  const corridorPoints = match?.corridor?.points || CORRIDOR;
+  const here = nearestOnPolyline(ping, corridorPoints);
 
   // Heading vs road direction, ignoring travel sense (0-90 deg scale).
   let offAxis = 0;
@@ -23,7 +25,7 @@ export function checkDeviation(tripId, ping) {
   const wasOnRoad = db
     .prepare('SELECT lat, lng FROM pings WHERE trip_id = ? ORDER BY ts DESC LIMIT 30')
     .all(tripId)
-    .some((p) => nearestOnPolyline(p, CORRIDOR).dist < 100);
+    .some((p) => nearestOnPolyline(p, corridorPoints).dist < 100);
 
   const suspicious =
     wasOnRoad &&

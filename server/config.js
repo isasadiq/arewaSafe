@@ -14,9 +14,9 @@ export const GEMMA_MODEL = process.env.GEMMA_MODEL || '';
 
 export const ROAD_NAME = 'Kaduna–Zaria highway';
 
-// IMPORTANT: this is a rough straight-line placeholder for the road.
-// Replace with real points along the highway (pick them off a map), or the
-// deviation detector will misfire wherever the real road bends >300 m away.
+export { CORRIDORS, findNearestCorridor, getCorridor } from './corridors.js';
+
+// Default corridor points
 export const CORRIDOR = [
   { lat: 10.5105, lng: 7.4165 }, // Kaduna
   { lat: 10.8, lng: 7.57 },      // midpoint (approx)

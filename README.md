@@ -83,12 +83,14 @@ flowchart TD
 | **Background GPS Telemetry** | **BUILT** | Periodic heartbeat with speed (km/h) and heading; silent error handling. |
 | **Dead-Man's Switch** | **BUILT** | Server watchdog triggers `DEAD_MAN` alert after 2 missed heartbeat cycles. |
 | **Bush-Deviation Detector** | **BUILT** | Vector analysis detecting slow perpendicular divergence from corridor. |
+| **Multi-Corridor Highway Geofencing** | **BUILT** | Pre-calibrated GPS vectors for Kaduna–Zaria, Abuja–Kaduna, Birnin Gwari, and Kano–Katsina. |
 | **Gemma 4 Tactical Dispatcher** | **BUILT** | Generates SitReps, ranked bearings, and Hausa warnings via Gemini API + fallback. |
-| **Projector-Ready Tactical Dashboard** | **BUILT** | High-contrast Leaflet UI, live tracks, SSE auto-reconnect, 5km circle inspection. |
-| **Interactive Replay Simulator** | **BUILT** | CLI demo runner (`scripts/replay.js`) for deviation, deadman, and manual alerts. |
-| **Real Flash SMS / Voice Gateway** | *ROADMAP* | Integration with Africa's Talking / Twilio for GSM emergency broadcast delivery. |
-| **SMS Heartbeat Fallback** | *ROADMAP* | Automated SMS ping when cellular data is lost or toggled off by an attacker. |
-| **Under-Seat Blackbox Hardware** | *ROADMAP* | Arduino / ESP32 vehicle blackbox tracker wired beneath bus passenger seats. |
+| **Projector Tactical Dashboard** | **BUILT** | Regional sand & night themes, live tracks, SSE auto-reconnect, 5km circle inspection. |
+| **In-Browser Demo Simulator & Chimes** | **BUILT** | 1-click scenario triggers directly in dashboard dock + synthesized Web Audio alert chimes. |
+| **GSM SMS / Flash Broadcast Gateway** | **BUILT** | Dual telecom integration with Africa's Talking (pan-African) and Twilio in `server/broadcaster.js`. |
+| **Under-Seat Blackbox Hardware** | **BUILT** | ESP32 + NEO-6M GPS + SIM800L C++ autonomous firmware in `hardware/blackbox.ino`. |
+| **Standalone Android APK Support** | **BUILT** | EAS Build profile configured in `mobile/eas.json` for direct phone APK installation. |
+| **SMS Heartbeat Fallback** | *ROADMAP* | Automated GSM SMS ping when cellular 3G/4G data is toggled off by an attacker. |
 | **Sovereign Local Edge Inference** | *ROADMAP* | Running quantized Gemma 4 weights directly on local Linux servers in police barracks. |
 
 ---

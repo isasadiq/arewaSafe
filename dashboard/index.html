@@ -305,6 +305,13 @@ body[data-theme="dark"] .foot { background: rgba(0,0,0,0.25); }
   <span id="live" class="live off" role="status"><i></i><span>Connecting</span></span>
 
   <div class="nav-actions">
+    <!-- Corridor Highway Selector -->
+    <select id="corridor-select" class="pill-btn" style="cursor: pointer;" title="Select Highway Corridor">
+      <option value="kaduna-zaria">Kaduna–Zaria Highway</option>
+      <option value="abuja-kaduna">Abuja–Kaduna Expressway</option>
+      <option value="birnin-gwari">Kaduna–Birnin Gwari Road</option>
+      <option value="kano-katsina">Kano–Katsina Highway</option>
+    </select>
     <!-- Sound Chime Toggle -->
     <button id="sound-toggle" class="pill-btn" title="Toggle audio alert chime">
       <span id="sound-icon">🔊</span>
@@ -432,18 +439,79 @@ body[data-theme="dark"] .foot { background: rgba(0,0,0,0.25); }
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(map);
 
-  // Kaduna–Zaria Highway Corridor Reference Polyline
-  const CORRIDOR = [
-    [10.5105, 7.4165], // Kaduna
-    [10.8, 7.57],      // Midpoint
-    [11.0855, 7.7199]  // Zaria
-  ];
-  L.polyline(CORRIDOR, {
-    color: '#2b4ba0',
-    weight: 3,
-    dashArray: '6, 8',
-    opacity: 0.5
-  }).addTo(map).bindTooltip("Kaduna–Zaria Highway Corridor", { sticky: true });
+  // Highway Corridors Database
+  const CORRIDORS = {
+    'kaduna-zaria': {
+      id: 'kaduna-zaria',
+      name: 'Kaduna–Zaria Highway',
+      points: [[10.5105, 7.4165], [10.6030, 7.4620], [10.7420, 7.5250], [10.8350, 7.5780], [10.9600, 7.6400], [11.0855, 7.7199]],
+      checkpoints: [
+        { name: 'Kaduna (Kawo)', lat: 10.5605, lng: 7.4420 },
+        { name: 'Maraban Jos', lat: 10.7420, lng: 7.5250 },
+        { name: 'Jaji Cantonment', lat: 10.8350, lng: 7.5780 },
+        { name: 'Zaria Toll Gate', lat: 11.0855, lng: 7.7199 }
+      ]
+    },
+    'abuja-kaduna': {
+      id: 'abuja-kaduna',
+      name: 'Abuja–Kaduna Expressway',
+      points: [[9.1120, 7.2140], [9.2450, 7.2780], [9.5310, 7.3750], [9.7820, 7.4320], [9.9850, 7.4720], [10.2100, 7.4550], [10.3550, 7.4350], [10.4850, 7.4200]],
+      checkpoints: [
+        { name: 'Zuba (Abuja)', lat: 9.1120, lng: 7.2140 },
+        { name: 'Tafa Toll Checkpoint', lat: 9.2450, lng: 7.2780 },
+        { name: 'Jere Junction', lat: 9.5310, lng: 7.3750 },
+        { name: 'Katari Transit Post', lat: 9.7820, lng: 7.4320 },
+        { name: 'Rijana Outpost', lat: 9.9850, lng: 7.4720 },
+        { name: 'Kaduna South Command', lat: 10.4850, lng: 7.4200 }
+      ]
+    },
+    'birnin-gwari': {
+      id: 'birnin-gwari',
+      name: 'Kaduna–Birnin Gwari Road',
+      points: [[10.5250, 7.3850], [10.6200, 7.1500], [10.6900, 6.9200], [10.6650, 6.5400]],
+      checkpoints: [
+        { name: 'Buruku Forest Gate', lat: 10.6200, lng: 7.1500 },
+        { name: 'Udawa Security Post', lat: 10.6900, lng: 6.9200 },
+        { name: 'Birnin Gwari Central', lat: 10.6650, lng: 6.5400 }
+      ]
+    },
+    'kano-katsina': {
+      id: 'kano-katsina',
+      name: 'Kano–Katsina Highway',
+      points: [[12.0022, 8.5120], [12.4350, 8.5150], [12.6500, 8.4100], [12.8200, 8.0100], [12.9850, 7.6000]],
+      checkpoints: [
+        { name: 'Kano (Dawanau)', lat: 12.0022, lng: 8.5120 },
+        { name: 'Dambatta', lat: 12.4350, lng: 8.5150 },
+        { name: 'Kazaure Gate', lat: 12.6500, lng: 8.4100 },
+        { name: 'Katsina Central', lat: 12.9850, lng: 7.6000 }
+      ]
+    }
+  };
+
+  let activeCorridorLayers = [];
+  function showCorridor(id, fly = true) {
+    activeCorridorLayers.forEach(l => map.removeLayer(l));
+    activeCorridorLayers = [];
+    const c = CORRIDORS[id] || CORRIDORS['kaduna-zaria'];
+    const line = L.polyline(c.points, { color: '#2b4ba0', weight: 4, dashArray: '6, 8', opacity: 0.65 }).addTo(map);
+    line.bindTooltip(`<b>${c.name}</b><br>Highway Corridor`, { sticky: true });
+    activeCorridorLayers.push(line);
+
+    c.checkpoints.forEach(cp => {
+      const dot = L.circleMarker([cp.lat, cp.lng], { radius: 6, color: '#1c2a56', fillColor: '#f5b83d', fillOpacity: 0.9, weight: 2 }).addTo(map);
+      dot.bindTooltip(`<b>${cp.name}</b><br>Checkpoint / Transit Hub`);
+      activeCorridorLayers.push(dot);
+    });
+
+    if (fly) {
+      map.flyToBounds(line.getBounds(), { padding: [60, 60], duration: 0.8 });
+    }
+  }
+
+  $('corridor-select').onchange = (e) => {
+    showCorridor(e.target.value);
+  };
+  showCorridor('kaduna-zaria', false);
 
   const trips = new Map();      // id -> {points, line, dot, last, speed, ended}
   const incidents = new Map();  // id -> incident
@@ -693,17 +761,28 @@ body[data-theme="dark"] .foot { background: rgba(0,0,0,0.25); }
 
   /* ---------- In-Browser Simulation Runner ---------- */
   window.runSim = async function (scenario) {
-    toast(`Running ${scenario.toUpperCase()} simulation...`);
+    const corridorId = $('corridor-select').value;
+    const c = CORRIDORS[corridorId] || CORRIDORS['kaduna-zaria'];
+    toast(`Running ${scenario.toUpperCase()} on ${c.name}...`);
     try {
       const res = await fetch(`${BASE}/trips/start`, { method: 'POST' });
       if (!res.ok) throw new Error('Failed to start trip');
       const { tripId } = await res.json();
 
-      let lat = 10.5105, lng = 7.4165, heading = 28, speed = 80;
+      const p1 = c.points[0];
+      const p2 = c.points[1] || c.points[0];
+      const dLat = (p2[0] - p1[0]);
+      const dLng = (p2[1] - p1[1]);
+      const len = Math.hypot(dLat, dLng) || 1;
+      const stepLat = (dLat / len) * 0.00045;
+      const stepLng = (dLng / len) * 0.00045;
+
+      let lat = p1[0], lng = p1[1], speed = 80;
+      let heading = Math.round((Math.atan2(dLng, dLat) * 180 / Math.PI + 360) % 360);
 
       // 4 highway heartbeats
       for (let i = 0; i < 4; i++) {
-        lat += 0.0004; lng += 0.0002;
+        lat += stepLat; lng += stepLng;
         await fetch(`${BASE}/heartbeat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -714,8 +793,11 @@ body[data-theme="dark"] .foot { background: rgba(0,0,0,0.25); }
 
       if (scenario === 'deviation') {
         // Veer 90 deg off highway into bush at 10 km/h
-        heading = 118; speed = 10;
-        lat -= 0.0013; lng += 0.0028;
+        const perpLat = -stepLng * 3.5;
+        const perpLng = stepLat * 3.5;
+        heading = (heading + 90) % 360;
+        speed = 10;
+        lat += perpLat; lng += perpLng;
         await fetch(`${BASE}/heartbeat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -723,22 +805,22 @@ body[data-theme="dark"] .foot { background: rgba(0,0,0,0.25); }
         });
         await new Promise(r => setTimeout(r, 700));
 
-        lat -= 0.0005; lng += 0.0012;
+        lat += perpLat * 0.4; lng += perpLng * 0.4;
         await fetch(`${BASE}/heartbeat`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tripId, lat, lng, speed, heading })
         });
-        toast('Bush Deviation detected! Generating Gemma AI SitRep...');
+        toast(`Bush Deviation detected on ${c.name}! Generating Gemma AI SitRep...`);
       } else if (scenario === 'manual') {
         await fetch(`${BASE}/alert`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tripId, lat, lng })
         });
-        toast('Silent 911= Panic Alert triggered!');
+        toast(`Silent 911= Panic Alert triggered on ${c.name}!`);
       } else if (scenario === 'deadman') {
-        toast('Heartbeats stopped. Watchdog dead-man switch will alarm shortly.');
+        toast(`Heartbeats stopped on ${c.name}. Watchdog will alarm shortly.`);
       }
     } catch (err) {
       toast(`Sim error: ${err.message}`, true);

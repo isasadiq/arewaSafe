@@ -3,16 +3,18 @@ import { emit } from './events.js';
 import { generateSitrep } from './dispatcher.js';
 import { broadcast } from './broadcaster.js';
 import { haversine, bearing } from './geo.js';
-import { BROADCAST_RADIUS_KM, ROAD_NAME } from './config.js';
+import { BROADCAST_RADIUS_KM, ROAD_NAME, findNearestCorridor } from './config.js';
 
 function summarize(type, pings, pos) {
   const lastPing = pings.at(-1);
   const first = pings[0];
   const moved = first && lastPing ? haversine(first, lastPing) : 0;
   const speeds = pings.map((p) => p.speed).filter(Number.isFinite);
+  const corridorMatch = findNearestCorridor(pos);
+  const road = corridorMatch?.corridor?.name || ROAD_NAME;
   return {
     incident_type: type,
-    road: ROAD_NAME,
+    road,
     last_position: { lat: pos.lat, lng: pos.lng },
     seconds_since_last_ping: lastPing ? Math.round((Date.now() - lastPing.ts) / 1000) : null,
     pings_considered: pings.length,
