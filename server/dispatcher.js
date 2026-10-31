@@ -21,7 +21,7 @@ ${JSON.stringify(data, null, 2)}`;
 function fallback(s) {
   const dir = Number.isFinite(s.track_bearing_deg) ? compass(s.track_bearing_deg) : null;
   return {
-    sitrep: `${s.incident_type} alert on ${s.road}. Last position ${s.last_position.lat.toFixed(4)}, ${s.last_position.lng.toFixed(4)}.` +
+    sitrep: `${({ MANUAL: 'Silent alarm raised from the phone', DEAD_MAN: 'Phone stopped reporting', BUSH_DEVIATION: 'Vehicle left the highway' })[s.incident_type] || s.incident_type} on ${s.road}. Last position ${s.last_position.lat.toFixed(4)}, ${s.last_position.lng.toFixed(4)}.` +
       (dir ? ` Last heading ${dir}.` : '') + ` Local time ${s.local_time}.`,
     likely_directions: dir
       ? [{ direction: dir, confidence: 0.3, reason: 'Continuing last known heading' }]

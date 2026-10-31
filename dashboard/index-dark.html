@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ArewaSafe dashboard</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,600..800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* Indigo cloth, harmattan sand, laterite red: colours of the region, picked for projector contrast */
+  --ink-950: #0a1022;
+  --ink-900: #101a33;
+  --ink-800: #17244a;
+  --ink-700: #223463;
+  --line: #2f4378;
+  --sand: #efe6d2;
+  --sand-dim: #b7b3a8;
+  --alert: #ff5a36;
+  --amber: #f5b83d;
+  --ok: #52c98c;
+  --trip: #63d2e6;
+  --display: "Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--ink-950);
+  color: var(--sand);
+  font: 400 17px/1.45 var(--body);
+  overflow: hidden;
+}
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+
+#map { position: fixed; inset: 0; background: var(--ink-950); }
+.leaflet-container { font-family: var(--body); }
+.leaflet-control-attribution { background: rgba(10,16,34,.8) !important; color: var(--sand-dim) !important; font-size: 11px; }
+.leaflet-control-attribution a { color: var(--sand-dim) !important; }
+.leaflet-bar a { background: var(--ink-900); color: var(--sand); border-color: var(--line); }
+.leaflet-bar a:hover { background: var(--ink-800); }
+
+/* floating panels */
+.panel {
+  position: fixed;
+  background: rgba(16,26,51,.93);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 1000;
+}
+
+/* top-left masthead */
+#mast {
+  top: 16px; left: 16px;
+  display: flex; align-items: center; gap: 18px;
+  padding: 10px 18px 10px 16px;
+  border-radius: 12px;
+}
+#mast h1 {
+  margin: 0;
+  font: 800 26px/1 var(--display);
+  font-stretch: 118%;
+  letter-spacing: -.01em;
+}
+.live { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
+.live i { width: 11px; height: 11px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 rgba(82,201,140,.7); animation: beat 2s infinite; }
+.live.off i { background: var(--amber); animation: none; }
+.live.off { color: var(--amber); }
+@keyframes beat { 70% { box-shadow: 0 0 0 9px rgba(82,201,140,0); } 100% { box-shadow: 0 0 0 0 rgba(82,201,140,0); } }
+
+/* left: ledger */
+#ledger {
+  top: 84px; left: 16px; bottom: 16px; width: 340px;
+  border-radius: 14px;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+#ledger h2 {
+  margin: 0; padding: 16px 18px 6px;
+  font: 700 20px/1.2 var(--display); font-stretch: 112%;
+}
+.sub { margin: 0; padding: 0 18px 10px; color: var(--sand-dim); font-size: 15px; }
+#ledger-scroll { overflow-y: auto; padding: 4px 12px 14px; flex: 1; }
+.group-title { margin: 14px 6px 6px; font: 700 16px var(--display); font-stretch: 110%; color: var(--sand-dim); }
+
+.card {
+  display: block; width: 100%; text-align: left;
+  background: var(--ink-800);
+  border: 1px solid transparent;
+  border-left: 7px solid var(--sand-dim);
+  border-radius: 8px;
+  padding: 11px 14px;
+  margin: 0 0 8px;
+  cursor: pointer;
+}
+.card:hover { background: var(--ink-700); }
+.card[aria-current="true"] { border-color: var(--sand); border-left-color: var(--c, var(--sand-dim)); background: var(--ink-700); }
+.card .t { font: 700 18px/1.25 var(--display); font-stretch: 105%; }
+.card .m { display: flex; justify-content: space-between; gap: 8px; margin-top: 3px; font-size: 15px; color: var(--sand-dim); }
+.card .st { font-weight: 700; color: var(--c); }
+.s-analyzing { --c: var(--trip); }
+.s-pending   { --c: var(--amber); }
+.s-confirmed { --c: var(--alert); }
+.s-sent      { --c: var(--ok); }
+.card { border-left-color: var(--c, var(--sand-dim)); }
+
+.trip { display: flex; justify-content: space-between; align-items: center; padding: 9px 14px; margin: 0 0 6px; background: var(--ink-900); border: 1px solid var(--line); border-radius: 8px; font-size: 16px; }
+.trip b { font-family: var(--display); font-stretch: 105%; }
+.trip .tag { font-weight: 700; color: var(--alert); }
+.trip .age { color: var(--sand-dim); }
+.empty { margin: 8px 6px; color: var(--sand-dim); }
+
+/* right: sheet */
+#sheet {
+  top: 16px; right: 16px; bottom: 16px; width: 450px;
+  border-radius: 14px;
+  display: none; flex-direction: column;
+  overflow: hidden;
+}
+#sheet.open { display: flex; animation: slide .28s ease-out; }
+@keyframes slide { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.sheet-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 18px 18px 8px; }
+.sheet-type { font: 800 26px/1.1 var(--display); font-stretch: 112%; }
+.sheet-meta { margin-top: 4px; color: var(--sand-dim); font-size: 16px; }
+.x { background: var(--ink-800); border: 1px solid var(--line); border-radius: 8px; width: 42px; height: 42px; font-size: 24px; line-height: 1; cursor: pointer; }
+.x:hover { background: var(--ink-700); }
+.sheet-body { overflow-y: auto; padding: 4px 18px 12px; flex: 1; }
+.badge { display: inline-block; padding: 4px 12px; border-radius: 99px; font-weight: 700; font-size: 16px; color: var(--ink-950); background: var(--c, var(--sand-dim)); margin: 4px 0 6px; }
+.sheet-body h3 { margin: 18px 0 6px; font: 700 18px var(--display); font-stretch: 108%; }
+.sheet-body p { margin: 0; }
+
+.dir { margin: 0 0 10px; }
+.dir .row { display: flex; justify-content: space-between; font-weight: 700; }
+.bar { height: 10px; background: var(--ink-800); border-radius: 6px; margin: 4px 0; overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--amber); border-radius: 6px; }
+.dir small { color: var(--sand-dim); font-size: 15px; }
+
+/* the community warning: printed-notice treatment, the heart of the product */
+.notice {
+  margin: 20px 0 4px;
+  background: var(--sand);
+  color: var(--ink-950);
+  border-radius: 10px;
+  padding: 16px 18px 14px;
+}
+.notice .lead { font: 700 15px var(--display); font-stretch: 110%; color: #5b4a2c; margin: 0 0 8px; }
+.notice .ha { font: 800 27px/1.18 var(--display); font-stretch: 104%; margin: 0; }
+.notice hr { border: 0; border-top: 2px solid rgba(10,16,34,.25); margin: 12px 0 10px; }
+.notice .en { margin: 0; font-size: 17px; }
+
+.checks { list-style: none; margin: 0; padding: 0; }
+.checks li { margin: 0 0 6px; }
+.checks label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.checks input { width: 20px; height: 20px; margin-top: 3px; accent-color: var(--ok); }
+
+.src { margin: 16px 0 0; color: var(--sand-dim); font-size: 14px; }
+
+.foot { padding: 14px 18px 18px; border-top: 1px solid var(--line); background: rgba(10,16,34,.5); }
+.btn {
+  display: block; width: 100%;
+  background: var(--alert); color: var(--ink-950);
+  border: 0; border-radius: 10px;
+  padding: 16px 18px;
+  font: 800 20px/1.2 var(--display); font-stretch: 108%;
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) { background: #ff7656; }
+.btn:disabled { background: var(--ink-700); color: var(--sand-dim); cursor: default; }
+.foot small { display: block; margin-top: 8px; color: var(--sand-dim); font-size: 15px; text-align: center; }
+.sent { display: flex; gap: 12px; align-items: flex-start; }
+.sent .tick { flex: none; width: 36px; height: 36px; border-radius: 50%; background: var(--ok); color: var(--ink-950); display: grid; place-items: center; font-size: 22px; font-weight: 800; }
+.sent b { font: 800 20px var(--display); font-stretch: 108%; display: block; }
+.sent span { color: var(--sand-dim); font-size: 16px; }
+
+.skeleton { height: 14px; border-radius: 6px; margin: 0 0 8px; background: linear-gradient(90deg, var(--ink-800) 25%, var(--ink-700) 50%, var(--ink-800) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+/* toast */
+#toast {
+  position: fixed; left: 50%; top: 16px; transform: translate(-50%, -140%);
+  z-index: 2000;
+  background: var(--ok); color: var(--ink-950);
+  font: 800 20px var(--display); font-stretch: 108%;
+  padding: 14px 24px; border-radius: 12px;
+  transition: transform .35s ease;
+  max-width: calc(100vw - 32px);
+}
+#toast.show { transform: translate(-50%, 0); }
+
+/* map markers */
+.inc-icon { background: none; border: 0; }
+.inc-icon .core { position: absolute; left: 7px; top: 7px; width: 18px; height: 18px; border-radius: 50%; background: var(--c); border: 3px solid var(--ink-950); }
+.inc-icon .pulse { position: absolute; left: 0; top: 0; width: 32px; height: 32px; border-radius: 50%; background: var(--c); opacity: .5; animation: ping 1.8s ease-out infinite; }
+.inc-icon.s-sent .pulse { animation: none; opacity: .25; }
+@keyframes ping { to { transform: scale(2.6); opacity: 0; } }
+
+@media (max-width: 960px) {
+  #ledger { top: auto; bottom: 0; left: 0; right: 0; width: auto; max-height: 34vh; border-radius: 14px 14px 0 0; }
+  #sheet { top: auto; bottom: 0; left: 0; right: 0; width: auto; height: 78vh; border-radius: 14px 14px 0 0; }
+  #mast { left: 8px; top: 8px; gap: 12px; }
+  #mast h1 { font-size: 21px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div id="map" role="application" aria-label="Map of trips and incidents"></div>
+
+<header id="mast" class="panel">
+  <h1>ArewaSafe</h1>
+  <span id="live" class="live off" role="status"><i></i><span>Connecting</span></span>
+</header>
+
+<aside id="ledger" class="panel" aria-label="Trips and incidents">
+  <h2 id="counts">Waiting for trips</h2>
+  <p class="sub" id="counts-sub">Phones report in while a trip is running.</p>
+  <div id="ledger-scroll"></div>
+</aside>
+
+<section id="sheet" class="panel" aria-label="Incident report"></section>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function () {
+  const BASE = new URLSearchParams(location.search).get('server') || '';
+  const RADIUS_KM = 5;
+
+  const TYPES = {
+    MANUAL: 'Silent alarm from the phone',
+    DEAD_MAN: 'Phone stopped reporting',
+    BUSH_DEVIATION: 'Vehicle left the highway',
+  };
+  const STATUS = {
+    ANALYZING: { label: 'Writing report', cls: 's-analyzing' },
+    PENDING_CONFIRM: { label: 'Waiting for your OK', cls: 's-pending' },
+    CONFIRMED: { label: 'Sending warning', cls: 's-confirmed' },
+    BROADCAST: { label: 'Warning sent', cls: 's-sent' },
+  };
+  const COLORS = { 's-analyzing': '#63d2e6', 's-pending': '#f5b83d', 's-confirmed': '#ff5a36', 's-sent': '#52c98c' };
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  function ago(ts) {
+    const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+    if (s < 5) return 'just now';
+    if (s < 60) return `${s}s ago`;
+    if (s < 3600) return `${Math.round(s / 60)} min ago`;
+    return `${Math.round(s / 3600)} h ago`;
+  }
+
+  /* ---------- map ---------- */
+  const map = L.map('map', { zoomControl: false }).setView([10.8, 7.57], 9);
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 18,
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+  }).addTo(map);
+
+  const trips = new Map();      // id -> {points, line, dot, last, speed, ended}
+  const incidents = new Map();  // id -> incident
+  const markers = new Map();    // incident id -> L.marker
+  let selected = null;
+  let ring = null;
+  let lastBroadcast = null;
+
+  function ensureTrip(id) {
+    let t = trips.get(id);
+    if (t) return t;
+    t = { id, points: [], last: null, speed: null, ended: false,
+      line: L.polyline([], { color: '#63d2e6', weight: 5, opacity: 0.9 }).addTo(map),
+      dot: L.circleMarker([0, 0], { radius: 9, color: '#0a1022', weight: 3, fillColor: '#63d2e6', fillOpacity: 1 }) };
+    trips.set(id, t);
+    fetch(`${BASE}/trips/${id}/track`).then((r) => r.json()).then((rows) => {
+      const back = rows.map((p) => [p.lat, p.lng]);
+      t.points = back.concat(t.points.slice(Math.max(0, t.points.length - 1)));
+      if (rows.length) { const l = rows[rows.length - 1]; t.last = t.last || l.ts; t.speed = t.speed ?? l.speed; }
+      drawTrip(t); renderLedger();
+    }).catch(() => {});
+    return t;
+  }
+  function drawTrip(t) {
+    t.line.setLatLngs(t.points);
+    if (t.points.length) {
+      t.dot.setLatLng(t.points[t.points.length - 1]);
+      if (!t.ended && !map.hasLayer(t.dot)) t.dot.addTo(map);
+    }
+    if (t.ended) { t.line.setStyle({ opacity: 0.3 }); map.removeLayer(t.dot); }
+  }
+
+  function markerIcon(status) {
+    const cls = (STATUS[status] || STATUS.ANALYZING).cls;
+    return L.divIcon({ className: `inc-icon ${cls}`, iconSize: [32, 32], iconAnchor: [16, 16],
+      html: `<span class="pulse" style="--c:${COLORS[cls]}"></span><span class="core" style="--c:${COLORS[cls]}"></span>` });
+  }
+  function ensureMarker(inc) {
+    if (inc.lat == null || inc.lng == null) return;
+    let m = markers.get(inc.id);
+    if (!m) {
+      m = L.marker([inc.lat, inc.lng], { icon: markerIcon(inc.status), keyboard: false }).addTo(map);
+      m.on('click', () => select(inc.id));
+      markers.set(inc.id, m);
+    } else {
+      m.setIcon(markerIcon(inc.status));
+    }
+  }
+
+  function select(id, fly = true) {
+    selected = id;
+    const inc = incidents.get(id);
+    if (ring) { map.removeLayer(ring); ring = null; }
+    if (inc && inc.lat != null) {
+      ring = L.circle([inc.lat, inc.lng], { radius: RADIUS_KM * 1000, color: '#ff5a36', weight: 2, dashArray: '8 8', fillColor: '#ff5a36', fillOpacity: 0.07 }).addTo(map);
+      if (fly) {
+        const wide = window.innerWidth > 960;
+        map.flyToBounds(ring.getBounds(), { paddingTopLeft: [wide ? 380 : 20, 90], paddingBottomRight: [wide ? 480 : 20, wide ? 30 : window.innerHeight * 0.55], duration: 0.8 });
+      }
+    }
+    renderLedger(); renderSheet();
+  }
+
+  /* ---------- data ---------- */
+  function mergeIncident(d, isNew) {
+    const prev = incidents.get(d.id);
+    const inc = Object.assign(prev || { created_at: Date.now() }, {
+      id: d.id,
+      tripId: d.tripId ?? d.trip_id ?? (prev && prev.tripId),
+      type: d.type, status: d.status, lat: d.lat, lng: d.lng,
+    });
+    if (d.created_at) inc.created_at = d.created_at;
+    if (d.sitrep) inc.sitrep = d.sitrep;
+    if (d.status === 'BROADCAST' && lastBroadcast) inc.broadcast = lastBroadcast;
+    incidents.set(inc.id, inc);
+    if (inc.tripId != null) ensureTrip(inc.tripId);
+    ensureMarker(inc);
+    if (isNew && !prev) select(inc.id); else { renderLedger(); if (selected === inc.id) renderSheet(); }
+  }
+
+  function onPing(p) {
+    const t = ensureTrip(p.tripId);
+    t.points.push([p.lat, p.lng]);
+    t.last = p.ts; t.speed = p.speed; t.ended = false;
+    drawTrip(t);
+    renderLedgerSoon();
+  }
+  function onTrip(d) {
+    const t = ensureTrip(d.id);
+    t.ended = d.status === 'ENDED';
+    drawTrip(t); renderLedger();
+  }
+
+  /* ---------- ledger ---------- */
+  let ledgerTimer = null;
+  function renderLedgerSoon() { if (!ledgerTimer) ledgerTimer = setTimeout(() => { ledgerTimer = null; renderLedger(); }, 600); }
+
+  function renderLedger() {
+    const list = [...incidents.values()].sort((a, b) => b.id - a.id);
+    const active = [...trips.values()].filter((t) => !t.ended && t.points.length);
+    const alertTrips = new Set(list.map((i) => i.tripId));
+
+    $('counts').textContent = list.length ? plural(list.length, 'incident', 'incidents') : (active.length ? plural(active.length, 'trip', 'trips') + ' on the road' : 'Waiting for trips');
+    $('counts-sub').textContent = list.length
+      ? `${plural(active.length, 'trip', 'trips')} still reporting in.`
+      : (active.length ? 'No incidents so far.' : 'Phones report in while a trip is running.');
+
+    let html = '';
+    html += '<div class="group-title">Incidents</div>';
+    html += list.length ? list.map((i) => {
+      const st = STATUS[i.status] || STATUS.ANALYZING;
+      return `<button class="card ${st.cls}" data-inc="${i.id}" aria-current="${selected === i.id}">
+        <div class="t">${esc(TYPES[i.type] || i.type)}</div>
+        <div class="m"><span>Trip ${esc(i.tripId)}, ${ago(i.created_at)}</span><span class="st">${st.label}</span></div>
+      </button>`;
+    }).join('') : '<p class="empty">Nothing to review.</p>';
+
+    html += '<div class="group-title">On the road</div>';
+    html += active.length ? active.map((t) => `
+      <div class="trip"><span><b>Trip ${esc(t.id)}</b>${t.speed != null ? `, ${Math.round(t.speed)} km/h` : ''}</span>
+      ${alertTrips.has(t.id) ? '<span class="tag">Alert</span>' : `<span class="age">${t.last ? ago(t.last) : ''}</span>`}</div>`).join('')
+      : '<p class="empty">No trips reporting right now.</p>';
+
+    const sc = $('ledger-scroll');
+    const top = sc.scrollTop;
+    sc.innerHTML = html;
+    sc.scrollTop = top;
+  }
+  $('ledger-scroll').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-inc]');
+    if (b) select(Number(b.dataset.inc));
+  });
+
+  /* ---------- sheet ---------- */
+  function renderSheet() {
+    const sheet = $('sheet');
+    const inc = incidents.get(selected);
+    if (!inc) { sheet.classList.remove('open'); sheet.innerHTML = ''; return; }
+    const st = STATUS[inc.status] || STATUS.ANALYZING;
+    const s = inc.sitrep;
+    const keep = [...sheet.querySelectorAll('.checks input')].map((c) => c.checked);
+
+    let body = '';
+    if (!s) {
+      body = `<h3>What happened</h3><div class="skeleton" style="width:95%"></div><div class="skeleton" style="width:80%"></div><div class="skeleton" style="width:88%"></div>
+              <p class="src">Gemma 4 is turning the phone's location data into a report.</p>`;
+    } else {
+      const dirs = (s.likely_directions || []).map((d) => {
+        const pct = Math.round(Math.max(0, Math.min(1, Number(d.confidence) || 0)) * 100);
+        return `<div class="dir"><div class="row"><span>${esc(d.direction)}</span><span>${pct}%</span></div>
+          <div class="bar"><span style="width:${pct}%"></span></div><small>${esc(d.reason)}</small></div>`;
+      }).join('');
+      const acts = (s.recommended_actions || []).map((a, i) => `<li><label><input type="checkbox" ${keep[i] ? 'checked' : ''}><span>${esc(a)}</span></label></li>`).join('');
+      const fallback = !s.source || s.source === 'fallback';
+      body = `
+        <h3>What happened</h3><p>${esc(s.sitrep)}</p>
+        ${dirs ? `<h3>Where they may be heading</h3>${dirs}<small class="src" style="display:block;margin:0">These are possibilities for responders to check, not predictions.</small>` : ''}
+        <section class="notice" aria-label="Warning for people nearby">
+          <p class="lead">Warning for people within ${RADIUS_KM} km</p>
+          <p class="ha" lang="ha">${esc(s.hausa_warning)}</p>
+          <hr><p class="en">${esc(s.english_warning)}</p>
+        </section>
+        ${acts ? `<h3>Responders should</h3><ul class="checks">${acts}</ul>` : ''}
+        <p class="src">${fallback ? 'Report from the built-in template. No AI model is connected.' : `Report written by ${esc(s.source)}.`}</p>`;
+    }
+
+    let foot;
+    if (inc.status === 'BROADCAST') {
+      const b = inc.broadcast;
+      foot = `<div class="sent"><div class="tick" aria-hidden="true">&#10003;</div><div><b>Warning sent</b>
+        <span>${b ? `Reached ${plural(b.sent, 'person', 'people')} within ${RADIUS_KM} km.` : `Sent to people within ${RADIUS_KM} km.`}</span></div></div>`;
+    } else if (inc.status === 'PENDING_CONFIRM') {
+      foot = `<button class="btn" id="confirm">Send warning to people within ${RADIUS_KM} km</button>
+        <small>Nothing goes out until you press this.</small>`;
+    } else if (inc.status === 'CONFIRMED') {
+      foot = `<button class="btn" disabled>Sending warning</button>`;
+    } else {
+      foot = `<button class="btn" disabled>Waiting for the report</button>`;
+    }
+
+    sheet.innerHTML = `
+      <div class="sheet-head"><div><div class="sheet-type">${esc(TYPES[inc.type] || inc.type)}</div>
+        <div class="sheet-meta">Trip ${esc(inc.tripId)}, ${ago(inc.created_at)}</div></div>
+        <button class="x" id="close" aria-label="Close report">&times;</button></div>
+      <div class="sheet-body"><span class="badge ${st.cls}">${st.label}</span>${body}</div>
+      <div class="foot">${foot}</div>`;
+    sheet.classList.add('open');
+
+    $('close').onclick = () => { selected = null; if (ring) { map.removeLayer(ring); ring = null; } renderSheet(); renderLedger(); };
+    const c = $('confirm');
+    if (c) c.onclick = async () => {
+      c.disabled = true; c.textContent = 'Sending warning';
+      try {
+        const r = await fetch(`${BASE}/incidents/${inc.id}/confirm`, { method: 'POST' });
+        if (!r.ok) throw new Error();
+      } catch (e) {
+        c.disabled = false; c.textContent = `Send warning to people within ${RADIUS_KM} km`;
+        toast('Could not send. Check the server and try again.', true);
+      }
+    };
+  }
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && selected !== null) $('close') && $('close').click(); });
+
+  /* ---------- toast ---------- */
+  let toastTimer;
+  function toast(msg, bad) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.style.background = bad ? '#ff5a36' : '';
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 7000);
+  }
+
+  /* ---------- live link ---------- */
+  function setLive(on) {
+    const el = $('live');
+    el.classList.toggle('off', !on);
+    el.lastElementChild.textContent = on ? 'Live' : 'Reconnecting';
+  }
+  function connect() {
+    const es = new EventSource(`${BASE}/stream`);
+    es.onopen = () => setLive(true);
+    es.onerror = () => setLive(false); // the browser retries on its own
+    es.addEventListener('ping', (e) => onPing(JSON.parse(e.data)));
+    es.addEventListener('trip', (e) => onTrip(JSON.parse(e.data)));
+    es.addEventListener('incident', (e) => mergeIncident(JSON.parse(e.data), true));
+    es.addEventListener('incident:update', (e) => mergeIncident(JSON.parse(e.data), false));
+    es.addEventListener('broadcast', (e) => {
+      lastBroadcast = JSON.parse(e.data);
+      toast(`Warning sent to ${plural(lastBroadcast.sent, 'person', 'people')} within ${RADIUS_KM} km`);
+    });
+  }
+
+  fetch(`${BASE}/incidents`).then((r) => r.json()).then((rows) => {
+    rows.forEach((r) => mergeIncident({ ...r, tripId: r.trip_id, sitrep: r.sitrep }, false));
+    const pending = [...incidents.values()].find((i) => i.status === 'PENDING_CONFIRM');
+    if (pending) select(pending.id);
+  }).catch(() => {}).finally(() => { renderLedger(); connect(); });
+
+  setInterval(() => { renderLedger(); if (selected !== null && incidents.get(selected)) { const m = document.querySelector('.sheet-meta'); const i = incidents.get(selected); if (m) m.textContent = `Trip ${i.tripId}, ${ago(i.created_at)}`; } }, 5000);
+  renderLedger();
+})();
+</script>
+</body>
+</html>

@@ -69,6 +69,10 @@ app.get('/incidents', (_req, res) => {
   res.json(rows.map((r) => ({ ...r, sitrep: r.sitrep_json ? JSON.parse(r.sitrep_json) : null })));
 });
 
+app.get('/trips', (_req, res) => {
+  res.json(db.prepare("SELECT id, status, started_at, last_ping_at FROM trips WHERE status != 'ENDED' ORDER BY id").all());
+});
+
 app.get('/trips/:id/track', (req, res) => {
   res.json(db.prepare('SELECT lat, lng, speed, heading, ts FROM pings WHERE trip_id = ? ORDER BY ts').all(Number(req.params.id)));
 });
