@@ -12,6 +12,10 @@ export const DEVIATION_STRIKES = n(process.env.DEVIATION_STRIKES, 2);
 export const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 export const GEMMA_MODEL = process.env.GEMMA_MODEL || '';
 
+// Security & Authentication
+export const DISPATCH_PIN = process.env.DISPATCH_PIN || '';
+export const REQUIRE_DEVICE_AUTH = process.env.REQUIRE_DEVICE_AUTH === 'true';
+
 export const ROAD_NAME = 'Kaduna–Zaria highway';
 
 export { CORRIDORS, findNearestCorridor, getCorridor } from './corridors.js';

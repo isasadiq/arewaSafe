@@ -10,10 +10,12 @@
  * - SIM800L GPRS/GSM Quad-band Cellular Module (UART Serial1)
  * - Onboard 3.7V 18650 Li-ion battery backup with TP4056 charger
  * - Covert driver foot microswitch (Panic Alert trigger)
+ * - Hardware Watchdog Timer (WDT) to prevent GSM lockup
  */
 
 #include <Arduino.h>
 #include <HardwareSerial.h>
+#include <esp_task_wdt.h>
 
 // Configuration & Server Endpoint
 const char* APN = "web.gprs.mtnnigeria.net"; // MTN Nigeria APN (or "internet.ng.airtel.com")
@@ -21,9 +23,12 @@ const char* APN_USER = "";
 const char* APN_PASS = "";
 const char* SERVER_HOST = "api.arewasafe.ng"; // Or laptop IP, e.g. "192.168.1.150"
 const int   SERVER_PORT = 3000;
+const char* DEVICE_TOKEN = "AREWASAFE-HW-BUS-01";
 
 const unsigned long HEARTBEAT_INTERVAL_MS = 10000; // 10s ping interval
 const int FOOT_SWITCH_PIN = 4; // Pull-up microswitch wired under driver footwell
+const int IGNITION_ACC_PIN = 34; // 12V ACC sensed through optocoupler (HIGH = engine running)
+const int WDT_TIMEOUT_SECONDS = 30; // Auto-reboot ESP32 if stuck for 30s
 
 // Serial Interfaces on ESP32
 HardwareSerial SerialGPS(2);  // RX2: GPIO 16, TX2: GPIO 17
@@ -49,21 +54,30 @@ void startTripSession();
 void setup() {
   Serial.begin(115200);
   pinMode(FOOT_SWITCH_PIN, INPUT_PULLUP);
+  pinMode(IGNITION_ACC_PIN, INPUT);
 
   Serial.println(F("[ArewaSafe Blackbox] Booting Covert Vehicle Telematics..."));
 
-  // Initialize GPS Serial (9600 baud standard for NEO-6M)
+  // 1. Initialize Hardware Watchdog (30s)
+  esp_task_wdt_init(WDT_TIMEOUT_SECONDS, true);
+  esp_task_wdt_add(NULL);
+
+  // 2. Initialize GPS Serial (9600 baud standard for NEO-6M)
   SerialGPS.begin(9600, SERIAL_8N1, 16, 17);
 
-  // Initialize GSM Modem Serial (9600 baud for SIM800L)
+  // 3. Initialize GSM Modem Serial (9600 baud for SIM800L)
   SerialGSM.begin(9600, SERIAL_8N1, 18, 19);
   delay(3000);
 
   initModem();
   startTripSession();
+  esp_task_wdt_reset();
 }
 
 void loop() {
+  // Reset watchdog timer on every main loop iteration
+  esp_task_wdt_reset();
+
   // 1. Ingest NMEA GPS Stream
   while (SerialGPS.available()) {
     String nmea = SerialGPS.readStringUntil('\n');
@@ -96,7 +110,7 @@ void initModem() {
   sendGsmCommand("AT+CPIN?", "READY"); // Verify SIM
   sendGsmCommand("AT+SAPBR=3,1,\"Contype\",\"GPRS\"", "OK");
   sendGsmCommand("AT+SAPBR=3,1,\"APN\",\"" + String(APN) + "\"", "OK");
-  sendGsmCommand("AT+SAPBR=1,1", "OK", 5000); // Open bearer
+  sendGsmCommand("AT+SAPBR=1,1", "OK", 6000); // Open bearer
   sendGsmCommand("AT+SAPBR=2,1", "OK"); // Query IP
   sendGsmCommand("AT+HTTPINIT", "OK");
   Serial.println(F("[GSM] Modem ready and online."));
@@ -107,6 +121,7 @@ bool sendGsmCommand(const String& cmd, const String& expected, unsigned long tim
   unsigned long start = millis();
   String resp = "";
   while (millis() - start < timeoutMs) {
+    esp_task_wdt_reset();
     while (SerialGSM.available()) {
       char c = SerialGSM.read();
       resp += c;
@@ -125,12 +140,12 @@ void startTripSession() {
   sendGsmCommand("AT+HTTPPARA=\"CID\",1", "OK");
   sendGsmCommand("AT+HTTPPARA=\"URL\",\"" + url + "\"", "OK");
   sendGsmCommand("AT+HTTPPARA=\"CONTENT\",\"application/json\"", "OK");
+  sendGsmCommand("AT+HTTPPARA=\"USERDATA\",\"X-Device-Token: " + String(DEVICE_TOKEN) + "\"", "OK");
   sendGsmCommand("AT+HTTPDATA=2,2000", "DOWNLOAD");
   SerialGSM.print("{}");
   delay(500);
   sendGsmCommand("AT+HTTPACTION=1", "+HTTPACTION: 1,200", 6000);
 
-  // Default to Trip #1 if GPRS mock, or parse response body
   if (tripId <= 0) tripId = 1;
   Serial.println(F("[API] Trip session active."));
 }
@@ -179,7 +194,6 @@ void sendEmergencyAlert() {
 void parseNmeaSentence(const String& sentence) {
   if (!sentence.startsWith("$GPRMC") && !sentence.startsWith("$GNRMC")) return;
 
-  // Format: $GPRMC,hhmmss.ss,A,llll.ll,a,yyyyy.yy,a,speed_knots,track_angle,date,...
   int idx = 0;
   String tokens[12];
   int tIdx = 0;

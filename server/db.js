@@ -30,6 +30,20 @@ CREATE TABLE IF NOT EXISTS incidents (
   sitrep_json TEXT,
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS devices (
+  id TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  token TEXT NOT NULL UNIQUE,
+  created_at INTEGER NOT NULL,
+  last_seen_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  action TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  details_json TEXT,
+  ts INTEGER NOT NULL
+);
 `);
 
 export default db;

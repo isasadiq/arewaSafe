@@ -1,6 +1,9 @@
 import { GEMINI_API_KEY, GEMMA_MODEL } from './config.js';
 import { compass } from './geo.js';
 
+const OLLAMA_HOST = process.env.OLLAMA_HOST || '';
+const LOCAL_MODEL = process.env.LOCAL_MODEL || 'gemma-4:9b';
+
 const PROMPT = (data) => `You are a tactical dispatch assistant for a travel-safety system on Nigerian highways.
 Turn the raw telemetry below into a short situation report for human responders (police, vigilantes, CJTF).
 
@@ -26,7 +29,6 @@ function fallback(s) {
     likely_directions: dir
       ? [{ direction: dir, confidence: 0.3, reason: 'Continuing last known heading' }]
       : [],
-    // Have a native Hausa speaker verify this line before any real use.
     hausa_warning: 'Gargadi: an samu rahoton matsalar tsaro a hanyar Kaduna zuwa Zariya. Ku nisanci yankin, ku sanar da jami’an tsaro.',
     english_warning: 'Warning: a security incident was reported on the Kaduna–Zaria road. Avoid the area and alert security forces.',
     recommended_actions: ['Dispatch nearest patrol to last known position', 'Alert checkpoints along last heading'],
@@ -42,6 +44,30 @@ function parseJson(text) {
 }
 
 export async function generateSitrep(summary) {
+  // 1. Sovereign Local Edge Inference (Ollama / llama.cpp air-gapped support)
+  if (OLLAMA_HOST) {
+    try {
+      console.log(`[dispatcher] Querying sovereign local edge model: ${LOCAL_MODEL} at ${OLLAMA_HOST}`);
+      const res = await fetch(`${OLLAMA_HOST.replace(/\/$/, '')}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: LOCAL_MODEL,
+          prompt: PROMPT(summary),
+          stream: false,
+          format: 'json',
+        }),
+        signal: AbortSignal.timeout(25000),
+      });
+      if (!res.ok) throw new Error(`Local model HTTP ${res.status}`);
+      const data = await res.json();
+      return { ...parseJson(data.response), source: `local:${LOCAL_MODEL}` };
+    } catch (err) {
+      console.error('[dispatcher] local model error, falling back:', err.message);
+    }
+  }
+
+  // 2. Cloud Google AI Studio / Gemini API Endpoint
   if (!GEMINI_API_KEY || !GEMMA_MODEL) return fallback(summary);
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMMA_MODEL}:generateContent`;

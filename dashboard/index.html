@@ -295,6 +295,16 @@ body[data-theme="dark"] .foot { background: rgba(0,0,0,0.25); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Printable Official Tactical Briefing Stylesheet */
+@media print {
+  body { background: #ffffff !important; color: #111827 !important; overflow: visible !important; }
+  #map, #mast, #ledger, #demo-dock, #toast, .x, .foot { display: none !important; }
+  #sheet { position: static !important; width: 100% !important; height: auto !important; border: 0 !important; box-shadow: none !important; display: block !important; padding: 20px !important; background: transparent !important; }
+  .sheet-body { overflow: visible !important; padding: 0 !important; }
+  .notice { background: #f3f4f6 !important; color: #111827 !important; border: 2px solid #374151 !important; }
+  .badge { border: 1px solid #111827 !important; color: #111827 !important; background: #e5e7eb !important; }
+}
 </style>
 </head>
 <body>
@@ -708,19 +718,40 @@ body[data-theme="dark"] .foot { background: rgba(0,0,0,0.25); }
         <div class="sheet-meta">Trip ${esc(inc.tripId)}, ${ago(inc.created_at)}</div></div>
         <button class="x" id="close" aria-label="Close report">&times;</button></div>
       <div class="sheet-body"><span class="badge ${st.cls}">${st.label}</span>${body}</div>
-      <div class="foot">${foot}</div>`;
+      <div class="foot">
+        ${foot}
+        <button class="pill-btn" id="print-sitrep" style="width: 100%; margin-top: 10px; justify-content: center;">
+          🖨️ Export Tactical SitRep (Print / PDF)
+        </button>
+      </div>`;
     sheet.classList.add('open');
 
     $('close').onclick = () => { selected = null; if (ring) { map.removeLayer(ring); ring = null; } renderSheet(); renderLedger(); };
+    $('print-sitrep').onclick = () => window.print();
+
     const c = $('confirm');
     if (c) c.onclick = async () => {
       c.disabled = true; c.textContent = 'Sending warning';
       try {
-        const r = await fetch(`${BASE}/incidents/${inc.id}/confirm`, { method: 'POST' });
+        const headers = { 'Content-Type': 'application/json' };
+        let storedPin = sessionStorage.getItem('arewasafe_pin') || '';
+        if (storedPin) headers['X-Dispatch-PIN'] = storedPin;
+
+        let r = await fetch(`${BASE}/incidents/${inc.id}/confirm`, { method: 'POST', headers });
+
+        if (r.status === 401) {
+          const pin = prompt('Tactical Authorization Required\nEnter Dispatcher PIN:');
+          if (pin) {
+            sessionStorage.setItem('arewasafe_pin', pin);
+            headers['X-Dispatch-PIN'] = pin;
+            r = await fetch(`${BASE}/incidents/${inc.id}/confirm`, { method: 'POST', headers });
+          }
+        }
+
         if (!r.ok) throw new Error();
       } catch (e) {
         c.disabled = false; c.textContent = `Send warning to people within ${RADIUS_KM} km`;
-        toast('Could not send. Check the server and try again.', true);
+        toast('Could not send. Check authorization and try again.', true);
       }
     };
   }

@@ -1,0 +1,30 @@
+services:
+  arewasafe-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: arewasafe-engine
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - HEARTBEAT_MS=10000
+      - MISSED_BEFORE_ALARM=2
+      - BROADCAST_RADIUS_KM=5
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMMA_MODEL=${GEMMA_MODEL:-gemini-flash-lite-latest}
+      - OLLAMA_HOST=${OLLAMA_HOST:-}
+      - LOCAL_MODEL=${LOCAL_MODEL:-gemma-4:9b}
+      - DISPATCH_PIN=${DISPATCH_PIN:-7749}
+      - REQUIRE_DEVICE_AUTH=${REQUIRE_DEVICE_AUTH:-false}
+    volumes:
+      - arewasafe_data:/app/server
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  arewasafe_data:

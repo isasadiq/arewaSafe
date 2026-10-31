@@ -8,6 +8,7 @@ import { addClient, removeClient, emit } from './events.js';
 import { checkDeviation, clearDeviation } from './deviation.js';
 import { createIncident, confirmIncident } from './incidents.js';
 import { startWatchdog } from './watchdog.js';
+import { rateLimiter, dispatcherAuth, deviceAuth, logAudit } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -15,9 +16,28 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../dashboard')));
 
+// System Health & Telemetry Metrics Endpoint
+app.get('/health', (_req, res) => {
+  const activeTrips = db.prepare("SELECT COUNT(*) AS c FROM trips WHERE status = 'ACTIVE'").get().c;
+  const totalIncidents = db.prepare('SELECT COUNT(*) AS c FROM incidents').get().c;
+  const totalPings = db.prepare('SELECT COUNT(*) AS c FROM pings').get().c;
+  res.json({
+    status: 'HEALTHY',
+    service: 'ArewaSafe Tactical Engine',
+    uptimeSeconds: Math.round(process.uptime()),
+    database: 'CONNECTED_WAL',
+    telemetry: {
+      active_trips: activeTrips,
+      total_incidents: totalIncidents,
+      total_pings: totalPings,
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
-app.post('/trips/start', (_req, res) => {
+app.post('/trips/start', rateLimiter(60000, 30), deviceAuth, (_req, res) => {
   const now = Date.now();
   const id = Number(
     db.prepare("INSERT INTO trips (status, started_at, last_ping_at) VALUES ('ACTIVE', ?, ?)").run(now, now).lastInsertRowid
@@ -35,7 +55,7 @@ app.post('/trips/:id/end', (req, res) => {
 });
 
 // body: { tripId, lat, lng, speed (km/h), heading (deg) }
-app.post('/heartbeat', (req, res) => {
+app.post('/heartbeat', rateLimiter(60000, 120), deviceAuth, (req, res) => {
   const { tripId } = req.body;
   const lat = num(req.body.lat), lng = num(req.body.lng);
   if (!tripId || lat === null || lng === null) return res.status(400).json({ error: 'tripId, lat, lng required' });
@@ -56,9 +76,10 @@ app.post('/heartbeat', (req, res) => {
 });
 
 // The calculator's silent "911=" trigger. body: { tripId, lat?, lng? }
-app.post('/alert', (req, res) => {
+app.post('/alert', rateLimiter(60000, 20), deviceAuth, (req, res) => {
   const { tripId } = req.body;
   if (!tripId) return res.status(400).json({ error: 'tripId required' });
+  logAudit('MANUAL_PANIC_TRIGGERED', req.ip || 'device', { tripId });
   createIncident(tripId, 'MANUAL', { lat: num(req.body.lat), lng: num(req.body.lng) })
     .catch((e) => console.error(e));
   res.json({ ok: true }); // generic reply, nothing for an attacker to see
@@ -82,9 +103,10 @@ app.get('/trips/:id/track', (req, res) => {
 });
 
 // Dashboard "Confirm & broadcast" button.
-app.post('/incidents/:id/confirm', (req, res) => {
+app.post('/incidents/:id/confirm', dispatcherAuth, (req, res) => {
   const result = confirmIncident(Number(req.params.id));
   if (!result) return res.status(409).json({ error: 'not ready or already broadcast' });
+  logAudit('BROADCAST_AUTHORIZED', req.ip || 'dispatcher', { incidentId: Number(req.params.id), sent: result.sent });
   res.json(result);
 });
 
