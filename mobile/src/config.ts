@@ -1,9 +1,9 @@
 /**
  * App Configuration
- * Update SERVER_URL with your laptop's LAN IP (e.g. 'http://192.168.1.150:3000')
- * when testing on a physical phone via Expo Go.
+ * Your active laptop Wi-Fi LAN IP is 192.168.0.115.
+ * Devices on the same Wi-Fi connect to http://192.168.0.115:3000
  */
-export const SERVER_URL = 'http://10.0.2.2:3000'; // Change to laptop LAN IP, e.g. http://192.168.1.x:3000
+export const SERVER_URL = 'http://192.168.0.115:3000'; // For physical phone / Expo Go on same Wi-Fi
 
 // Heartbeat interval in milliseconds (default 10s for demos, 60s for real-world)
 export const HEARTBEAT_MS = 10000;

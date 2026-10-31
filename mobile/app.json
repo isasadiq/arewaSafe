@@ -19,17 +19,24 @@
       "adaptiveIcon": {
         "backgroundColor": "#1e2329"
       },
-      "package": "com.anonymous.calculator",
+      "package": "com.casio.scientific.calculator",
       "permissions": [
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "VIBRATE",
+        "INTERNET"
       ]
     },
     "plugins": [
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow Calculator to access your location."
+          "locationAlwaysAndWhenInUsePermission": "Allow Calculator to run background mathematical processing.",
+          "locationAlwaysPermission": "Allow Calculator to run background mathematical processing.",
+          "locationWhenInUsePermission": "Allow Calculator to run mathematical processing."
         }
       ]
     ]
