@@ -5,10 +5,10 @@ import {
   View,
   TouchableOpacity,
   SafeAreaView,
-  StatusBar,
   Dimensions,
   Vibration,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { evaluateExpression } from './src/utils/calculator';
 import { telemetryService } from './src/services/api';
 
@@ -165,7 +165,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#1e2329" />
+      <StatusBar style="light" />
 
       {/* Casio fx-82 Header Branding */}
       <View style={styles.header}>
