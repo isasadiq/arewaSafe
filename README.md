@@ -88,10 +88,12 @@ flowchart TD
 | **Projector Tactical Dashboard** | **BUILT** | Regional sand & night themes, live tracks, SSE auto-reconnect, 5km circle inspection. |
 | **In-Browser Demo Simulator & Chimes** | **BUILT** | 1-click scenario triggers directly in dashboard dock + synthesized Web Audio alert chimes. |
 | **GSM SMS / Flash Broadcast Gateway** | **BUILT** | Dual telecom integration with Africa's Talking (pan-African) and Twilio in `server/broadcaster.js`. |
-| **Under-Seat Blackbox Hardware** | **BUILT** | ESP32 + NEO-6M GPS + SIM800L C++ autonomous firmware in `hardware/blackbox.ino`. |
-| **Standalone Android APK Support** | **BUILT** | EAS Build profile configured in `mobile/eas.json` for direct phone APK installation. |
-| **SMS Heartbeat Fallback** | *ROADMAP* | Automated GSM SMS ping when cellular 3G/4G data is toggled off by an attacker. |
-| **Sovereign Local Edge Inference** | *ROADMAP* | Running quantized Gemma 4 weights directly on local Linux servers in police barracks. |
+| **Under-Seat Blackbox Hardware** | **BUILT** | ESP32 + NEO-6M GPS + SIM800L C++ autonomous firmware in `hardware/blackbox.ino` with hardware WDT, crash sensing, and ignition sleep. |
+| **Standalone Android APK Support** | **BUILT** | EAS Build profile configured in `mobile/eas.json` (Expo SDK 58, React 19, React Native 0.88). |
+| **SMS Emergency Fallback** | **BUILT** | Automated covert SMS dispatch when cellular 3G/4G data is toggled off or in forest dead-zones. |
+| **Sovereign Local Edge Inference** | **BUILT** | Ollama / llama.cpp local adapter in `server/dispatcher.js` running air-gapped Gemma 4 with zero internet dependency. |
+| **Tactical RBAC & Device Tokens** | **BUILT** | `X-Device-Token` pre-shared fleet authentication, Dispatcher PIN protection, and append-only audit trail in `server/auth.js`. |
+| **Rapid Intercept Response Vectors** | **BUILT** | Computes road distance to closest checkpoint/patrol post and draws tactical intercept lines on the Leaflet dashboard. |
 
 ---
 
